@@ -1,31 +1,14 @@
 package com.example.hdcfuncap.features
 
+import android.widget.Toast
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TextField
-import androidx.compose.material3.TextFieldDefaults
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -37,25 +20,38 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.hdcfuncap.R
-import kotlinx.coroutines.launch
-import android.widget.Toast
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.MaterialTheme
 import com.example.hdcfuncap.network.LoginRequest
 import com.example.hdcfuncap.network.RetrofitClient
+
+ import com.example.hdcfuncap.storage.UserPreferences
+import kotlinx.coroutines.launch
 
 @Composable
 fun LoginScreen(modifier: Modifier = Modifier, onLoginSuccess: () -> Unit) {
 
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
+     val userPreferences = remember { UserPreferences(context) }
+     val savedUser by userPreferences.savedUsername.collectAsState(initial = "")
+     val isRemember by userPreferences.isRememberMeChecked.collectAsState(initial = false)
     var usuario by remember { mutableStateOf("") }
     var senha by remember { mutableStateOf("") }
     var senhaVisivel by remember { mutableStateOf(false) }
+    var lembrarDeMim by remember { mutableStateOf(false) }
+    var isLoading by remember { mutableStateOf(false) }
+
     val corFundoInput = Color(0xFFEDF4FF)
     val corTextoCinza = Color(0xFF757575)
     val corBotao = Color(0xFF6B9BFE)
-    val coroutineScope = rememberCoroutineScope()
-    val context = LocalContext.current
-    var isLoading by remember { mutableStateOf(false) }
+
+
+    LaunchedEffect(savedUser, isRemember) {
+        if (savedUser.isNotEmpty()) {
+            usuario = savedUser
+        }
+        lembrarDeMim = isRemember
+    }
+
 
     Column(
         modifier = modifier
@@ -146,7 +142,20 @@ fun LoginScreen(modifier: Modifier = Modifier, onLoginSuccess: () -> Unit) {
             singleLine = true
         )
 
-        Spacer(modifier = Modifier.height(40.dp))
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Checkbox(
+                checked = lembrarDeMim,
+                onCheckedChange = { lembrarDeMim = it }
+            )
+            Text(text = "Lembrar de mim", color = corTextoCinza, fontSize = 14.sp)
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
 
         Button(
             enabled = !isLoading,
@@ -156,7 +165,11 @@ fun LoginScreen(modifier: Modifier = Modifier, onLoginSuccess: () -> Unit) {
                 coroutineScope.launch {
                     try {
                         val request = LoginRequest(username = usuario, senha = senha)
-                        val response = RetrofitClient.authApi.logar(request)
+                        val response = RetrofitClient.getAuthApi(context).logar(request)
+
+                        userPreferences.saveToken(response.token)
+                        userPreferences.savePaciente(id = response.id, nome = usuario)
+                        userPreferences.saveUser(username = usuario, remember = lembrarDeMim)
 
                         Toast.makeText(context, "Sucesso!", Toast.LENGTH_SHORT).show()
                         onLoginSuccess()
@@ -172,15 +185,15 @@ fun LoginScreen(modifier: Modifier = Modifier, onLoginSuccess: () -> Unit) {
                 .height(56.dp),
             shape = RoundedCornerShape(12.dp),
             colors = ButtonDefaults.buttonColors(
-                containerColor = androidx.compose.ui.graphics.Color(0xFF6699FF),
-                disabledContainerColor = androidx.compose.ui.graphics.Color(0xFF6699FF).copy(alpha = 0.7f),
-                contentColor = androidx.compose.ui.graphics.Color.White,
-                disabledContentColor = androidx.compose.ui.graphics.Color.White
+                containerColor = corBotao,
+                disabledContainerColor = corBotao.copy(alpha = 0.7f),
+                contentColor = Color.White,
+                disabledContentColor = Color.White
             )
         ) {
             if (isLoading) {
                 CircularProgressIndicator(
-                    color = androidx.compose.ui.graphics.Color.White,
+                    color = Color.White,
                     modifier = Modifier.size(24.dp)
                 )
             } else {
@@ -202,4 +215,3 @@ fun LoginScreen(modifier: Modifier = Modifier, onLoginSuccess: () -> Unit) {
         }
     }
 }
-
