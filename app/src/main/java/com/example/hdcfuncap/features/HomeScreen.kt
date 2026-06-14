@@ -43,15 +43,11 @@ fun HomeScreen(
 ) {
     val context = LocalContext.current
     val userPreferences = remember { UserPreferences(context) }
-
-    // 👇 1. AQUI ESTÁ A MUDANÇA: Agora ele puxa o ID e o Nome direto do celular
     val pacienteId by userPreferences.pacienteId.collectAsState(initial = null)
     val pacienteNome by userPreferences.pacienteNome.collectAsState(initial = "Paciente")
-
     val medicamentos by viewModel.medicamentos.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
 
-    // 👇 2. AQUI TAMBÉM MUDOU: O LaunchedEffect agora observa o pacienteId e usa ele para buscar os dados
     LaunchedEffect(pacienteId) {
         pacienteId?.let { id ->
             android.util.Log.d("HDC_TESTE", "Buscando dados do paciente dinâmico: $id")

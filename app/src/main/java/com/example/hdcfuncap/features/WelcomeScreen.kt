@@ -25,7 +25,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.hdcfuncap.R
 
-//VAI TER UTILIDADE MAIS PRA FRENTE
 @Composable
 fun WelcomeScreen(modifier: Modifier = Modifier) {
     Column(

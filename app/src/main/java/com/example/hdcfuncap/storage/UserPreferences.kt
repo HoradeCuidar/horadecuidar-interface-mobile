@@ -17,12 +17,9 @@ class UserPreferences(private val context: Context) {
         val REMEMBER_ME_KEY = booleanPreferencesKey("remember_me")
         val TOKEN_KEY = stringPreferencesKey("jwt_token")
 
-        // As chaves que a IA sugeriu:
         val PACIENTE_ID_KEY = longPreferencesKey("paciente_id")
         val PACIENTE_NOME_KEY = stringPreferencesKey("paciente_nome")
     }
-
-    // 👇 AS VARIÁVEIS QUE A HOMESCREEN ESTÁ PROCURANDO
     val pacienteId: Flow<Long?> = context.dataStore.data.map { preferences ->
         preferences[PACIENTE_ID_KEY]
     }
@@ -42,8 +39,6 @@ class UserPreferences(private val context: Context) {
     val isRememberMeChecked: Flow<Boolean> = context.dataStore.data.map { preferences ->
         preferences[REMEMBER_ME_KEY] ?: false
     }
-
-    // 👇 A função para salvar os dados no momento do Login
     suspend fun savePaciente(id: Long, nome: String) {
         context.dataStore.edit { preferences ->
             preferences[PACIENTE_ID_KEY] = id

@@ -16,8 +16,6 @@ object RetrofitClient {
 
         val authInterceptor = Interceptor { chain ->
             val originalRequest = chain.request()
-
-            // runBlocking é necessário pois a interface do Interceptor é síncrona
             val token = runBlocking { userPreferences.getAuthToken() }
 
             val newRequest = if (!token.isNullOrEmpty()) {

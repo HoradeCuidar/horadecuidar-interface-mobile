@@ -42,16 +42,10 @@ class MainActivity : ComponentActivity() {
                 }
                 composable("home") {
                     val context = LocalContext.current
-
-                    // 1. Cria a API
                     val authApi = remember { RetrofitClient.getAuthApi(context) }
-
-                    // 2. Monta o ViewModel com a Factory
                     val homeViewModel: HomeViewModel = viewModel(
                         factory = HomeViewModelFactory(authApi)
                     )
-
-                    // 3. Entrega o ViewModel pronto para a tela
                     HomeScreen(
                         onNavigate = { rota -> navController.navigate(rota) },
                         viewModel = homeViewModel
