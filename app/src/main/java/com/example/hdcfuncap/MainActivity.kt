@@ -21,6 +21,9 @@ import androidx.navigation.compose.rememberNavController
 import com.example.hdcfuncap.features.HomeScreen
 import com.example.hdcfuncap.features.HomeViewModel
 import com.example.hdcfuncap.features.HomeViewModelFactory
+import com.example.hdcfuncap.features.RegistrarScreen
+import com.example.hdcfuncap.features.RegistrarViewModel
+import com.example.hdcfuncap.features.RegistrarViewModelFactory
 import com.example.hdcfuncap.network.RetrofitClient
 import com.example.hdcfuncap.ui.theme.HdcFuncapTheme
 
@@ -49,6 +52,19 @@ class MainActivity : ComponentActivity() {
                     HomeScreen(
                         onNavigate = { rota -> navController.navigate(rota) },
                         viewModel = homeViewModel
+                    )
+                }
+                composable("registrar") {
+                    val context = LocalContext.current
+                    val authApi = remember { RetrofitClient.getAuthApi(context) }
+
+                    val registrarViewModel: RegistrarViewModel = viewModel(
+                        factory = RegistrarViewModelFactory(authApi)
+                    )
+
+                    RegistrarScreen(
+                        onNavigate = { rota -> navController.navigate(rota) },
+                        viewModel = registrarViewModel
                     )
                 }
             }

@@ -13,6 +13,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.outlined.DirectionsWalk
 import androidx.compose.material.icons.outlined.Medication
 import androidx.compose.material.icons.outlined.Restaurant
@@ -221,8 +222,18 @@ fun HomeScreen(
 @Composable
 fun MedicamentoCard(medicamento: MedicamentoHojeResponse) {
     val isFeito = medicamento.statusAdesaoHoje == "REALIZADO"
-    val corStatus = if (isFeito) Color(0xFF8DE39D) else Color(0xFF6B9DFE)
-    val iconeStatus = if (isFeito) Icons.Default.Check else Icons.Outlined.Schedule
+    val isNaoFeito = medicamento.statusAdesaoHoje == "NAO_REALIZADO"
+
+    val corFundoIcone = when {
+        isFeito -> Color(0xFF8DE39D)
+        isNaoFeito -> Color(0xFFFF6B6B)
+        else -> Color(0xFF6B9DFE)
+    }
+    val iconeStatus = when {
+        isFeito -> Icons.Default.Check
+        isNaoFeito -> Icons.Default.Close
+        else -> Icons.Outlined.Schedule
+    }
 
     var expandido by remember { mutableStateOf(false) }
 
@@ -230,9 +241,7 @@ fun MedicamentoCard(medicamento: MedicamentoHojeResponse) {
         modifier = Modifier
             .fillMaxWidth()
             .animateContentSize()
-            .clickable {
-                expandido = !expandido
-            },
+            .clickable { expandido = !expandido },
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
@@ -248,7 +257,7 @@ fun MedicamentoCard(medicamento: MedicamentoHojeResponse) {
                 Box(
                     modifier = Modifier
                         .size(40.dp)
-                        .background(corStatus, CircleShape),
+                        .background(corFundoIcone, CircleShape),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
@@ -260,7 +269,6 @@ fun MedicamentoCard(medicamento: MedicamentoHojeResponse) {
                 }
 
                 Spacer(modifier = Modifier.width(16.dp))
-
                 Column(
                     modifier = Modifier.weight(1f)
                 ) {
@@ -278,36 +286,43 @@ fun MedicamentoCard(medicamento: MedicamentoHojeResponse) {
                     )
                 }
 
-                if (isFeito) {
-                    Box(
-                        modifier = Modifier
-                            .background(Color(0xFF8DE39D), RoundedCornerShape(20.dp))
-                            .padding(horizontal = 16.dp, vertical = 6.dp)
-                    ) {
-                        Text(
-                            text = "Feito",
-                            color = Color.White,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold
-                        )
+                Spacer(modifier = Modifier.width(8.dp))
+
+                when {
+                    isFeito -> {
+                        Box(
+                            modifier = Modifier
+                                .background(Color(0xFF8DE39D), RoundedCornerShape(16.dp))
+                                .padding(horizontal = 12.dp, vertical = 6.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text("Feito", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
                     }
-                } else {
-                    Box(
-                        modifier = Modifier
-                            .border(1.dp, Color(0xFF6B9DFE), RoundedCornerShape(20.dp))
-                            .clip(RoundedCornerShape(20.dp))
-                            .padding(horizontal = 16.dp, vertical = 6.dp)
-                    ) {
-                        Text(
-                            text = "Pendente",
-                            color = Color(0xFF6B9DFE),
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold
-                        )
+                    isNaoFeito -> {
+                        Box(
+                            modifier = Modifier
+                                .background(Color(0xFFFFE5E5), RoundedCornerShape(16.dp))
+                                .padding(horizontal = 12.dp, vertical = 6.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text("Não feito", color = Color(0xFFFF6B6B), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                    else -> {
+                        Box(
+                            modifier = Modifier
+                                .border(1.dp, Color(0xFF6B9DFE), RoundedCornerShape(16.dp))
+                                .padding(horizontal = 12.dp, vertical = 6.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text("Pendente", color = Color(0xFF6B9DFE), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
                     }
                 }
             }
 
+            // DETALHES EXPANDIDOS (Abaixo da linha)
             if (expandido) {
                 Spacer(modifier = Modifier.height(16.dp))
 

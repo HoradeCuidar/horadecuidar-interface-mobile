@@ -80,10 +80,12 @@ fun HdcBottomBar(
                 )
             }
             Spacer(modifier = Modifier.height(4.dp))
+            val corTextoRegistrar = if (currentScreen == "registrar") azulHdc else Color.Gray
+
             Text(
                 text = "Registrar",
                 fontSize = 12.sp,
-                color = Color.Gray
+                color = corTextoRegistrar
             )
         }
     }
