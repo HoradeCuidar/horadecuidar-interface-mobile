@@ -23,7 +23,35 @@ class RegistrarViewModel(private val authApi: AuthApi) : ViewModel() {
         viewModelScope.launch {
             _isLoading.value = true
             try {
-                _medicamentos.value = authApi.getMedicamentosHoje(pacienteId)
+                val medicamentosHoje = authApi.getMedicamentosHoje(pacienteId)
+                val medicamentosPendentes = medicamentosHoje.filter { it.statusAdesaoHoje == null }
+
+                if (medicamentosPendentes.isNotEmpty()) {
+                    medicamentosPendentes.forEach { medicamento ->
+                        val request = AtualizarAdesaoRequest(
+                            itemMedicacaoId = medicamento.itemId,
+                            status = "NAO_REALIZADO",
+                            observacao = medicamento.observacao ?: ""
+                        )
+
+                        if (medicamento.adesaoId != null) {
+                            authApi.registrarAdesao(
+                                pacienteId = pacienteId,
+                                adesaoId = medicamento.adesaoId,
+                                request = request
+                            )
+                        } else {
+                            authApi.criarAdesao(
+                                pacienteId = pacienteId,
+                                request = request
+                            )
+                        }
+                    }
+
+                    _medicamentos.value = authApi.getMedicamentosHoje(pacienteId)
+                } else {
+                    _medicamentos.value = medicamentosHoje
+                }
             } catch (e: Exception) {
                 e.printStackTrace()
             } finally {
@@ -32,7 +60,7 @@ class RegistrarViewModel(private val authApi: AuthApi) : ViewModel() {
         }
     }
 
-    fun registrarAdesao(itemId: Long, adesaoId: Long?, status: String?, observacao: String, pacienteId: Long) {
+    fun registrarAdesao(itemId: Long, adesaoId: Long?, status: String, observacao: String, pacienteId: Long) {
         viewModelScope.launch {
             try {
                 val request = AtualizarAdesaoRequest(

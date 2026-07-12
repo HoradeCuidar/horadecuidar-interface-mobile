@@ -27,7 +27,11 @@ import com.example.hdcfuncap.network.RetrofitClient
 import kotlinx.coroutines.launch
 
 @Composable
-fun LoginScreen(modifier: Modifier = Modifier, onLoginSuccess: () -> Unit) {
+fun LoginScreen(
+    modifier: Modifier = Modifier,
+    onLoginSuccess: () -> Unit,
+    onForgotPassword: () -> Unit
+) {
 
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -204,7 +208,7 @@ fun LoginScreen(modifier: Modifier = Modifier, onLoginSuccess: () -> Unit) {
         Spacer(modifier = Modifier.height(16.dp))
 
         TextButton(
-            onClick = { },
+            onClick = onForgotPassword,
             modifier = Modifier.align(Alignment.CenterHorizontally)
         ) {
             Text(

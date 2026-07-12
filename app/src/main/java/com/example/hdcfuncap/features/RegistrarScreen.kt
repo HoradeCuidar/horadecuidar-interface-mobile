@@ -10,9 +10,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.outlined.Medication
-import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -94,20 +92,17 @@ fun RegistrarScreen(
 @Composable
 fun RegistroMedicamentoCard(
     medicamento: MedicamentoHojeResponse,
-    onRegistrar: (String?) -> Unit
+    onRegistrar: (String) -> Unit
 ) {
     val isFeito = medicamento.statusAdesaoHoje == "REALIZADO"
-    val isNaoFeito = medicamento.statusAdesaoHoje == "NAO_REALIZADO"
 
     val corCardFundo = when {
         isFeito -> Color(0xFFE8F7ED)
-        isNaoFeito -> Color(0xFFFFF0F0)
         else -> Color.White
     }
     val corBorda = when {
         isFeito -> Color(0xFFBCE3C5)
-        isNaoFeito -> Color(0xFFFFD6D6)
-        else -> Color.Transparent
+        else -> Color(0xFFE2E8F0)
     }
 
     Card(
@@ -116,7 +111,7 @@ fun RegistroMedicamentoCard(
             .border(1.dp, corBorda, RoundedCornerShape(16.dp)),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = corCardFundo),
-        elevation = CardDefaults.cardElevation(defaultElevation = if (isFeito || isNaoFeito) 0.dp else 2.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = if (isFeito) 0.dp else 2.dp)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -135,16 +130,12 @@ fun RegistroMedicamentoCard(
                     Box(modifier = Modifier.size(32.dp).background(Color(0xFF8DE39D), CircleShape), contentAlignment = Alignment.Center) {
                         Icon(imageVector = Icons.Default.Check, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
                     }
-                } else if (isNaoFeito) {
-                    Box(modifier = Modifier.size(32.dp).background(Color(0xFFFF6B6B), CircleShape), contentAlignment = Alignment.Center) {
-                        Icon(imageVector = Icons.Default.Close, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
-                    }
                 }
             }
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            if (isFeito || isNaoFeito) {
+            if (isFeito) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -152,49 +143,46 @@ fun RegistroMedicamentoCard(
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
-                            imageVector = if (isFeito) Icons.Default.Check else Icons.Default.Close,
+                            imageVector = Icons.Default.Check,
                             contentDescription = null,
-                            tint = if (isFeito) Color(0xFF8DE39D) else Color(0xFFFF6B6B),
+                            tint = Color(0xFF8DE39D),
                             modifier = Modifier.size(16.dp)
                         )
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(
-                            text = if (isFeito) "Registrado" else "Marcado como não tomado",
+                            text = "Registrado",
                             fontSize = 14.sp,
-                            color = if (isFeito) Color(0xFF8DE39D) else Color(0xFFFF6B6B),
+                            color = Color(0xFF8DE39D),
                             fontWeight = FontWeight.Medium
                         )
                     }
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.clickable { onRegistrar(null) }
-                    ) {
-                        Icon(imageVector = Icons.Outlined.Refresh, contentDescription = null, tint = Color.Gray, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(text = "Desfazer", fontSize = 14.sp, color = Color.Gray)
-                    }
+                    Text(
+                        text = "Corrigir",
+                        fontSize = 14.sp,
+                        color = Color.Gray,
+                        modifier = Modifier.clickable { onRegistrar("NAO_REALIZADO") }
+                    )
                 }
             } else {
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        text = "Ainda não registrado",
+                        fontSize = 14.sp,
+                        color = Color.Gray,
+                        fontWeight = FontWeight.Medium
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
                     Button(
                         onClick = { onRegistrar("REALIZADO") },
-                        modifier = Modifier.weight(1f).height(48.dp),
+                        modifier = Modifier.fillMaxWidth().height(48.dp),
                         shape = RoundedCornerShape(12.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF8DE39D))
                     ) {
                         Icon(imageVector = Icons.Default.Check, contentDescription = null, tint = Color.White)
                         Spacer(modifier = Modifier.width(8.dp))
                         Text("Tomei", color = Color.White, fontWeight = FontWeight.Bold)
-                    }
-                    Button(
-                        onClick = { onRegistrar("NAO_REALIZADO") },
-                        modifier = Modifier.weight(1f).height(48.dp),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFE5E5))
-                    ) {
-                        Icon(imageVector = Icons.Default.Close, contentDescription = null, tint = Color(0xFFFF6B6B))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Não tomei", color = Color(0xFFFF6B6B), fontWeight = FontWeight.Bold)
                     }
                 }
             }

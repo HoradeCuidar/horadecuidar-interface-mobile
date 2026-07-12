@@ -3,6 +3,9 @@ package com.example.hdcfuncap.features
 import android.os.Build
 import androidx.annotation.RequiresApi
 import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -12,9 +15,9 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.DirectionsWalk
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.outlined.DirectionsWalk
 import androidx.compose.material.icons.outlined.Medication
 import androidx.compose.material.icons.outlined.Restaurant
 import androidx.compose.material.icons.outlined.Schedule
@@ -35,7 +38,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -70,7 +76,7 @@ fun HomeScreen(
         val calendario = java.util.Calendar.getInstance()
         val formatador = java.text.SimpleDateFormat(
             "EEEE, dd 'de' MMMM",
-            java.util.Locale("pt", "BR")
+            java.util.Locale.forLanguageTag("pt-BR")
         )
         formatador.format(calendario.time).replaceFirstChar { it.uppercase() }
     }
@@ -115,19 +121,10 @@ fun HomeScreen(
             }
 
             item {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(140.dp)
-                        .background(azulHdc, RoundedCornerShape(16.dp)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = "Área do Dashboard Gráfico",
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
+                DashboardProgressoCard(
+                    medicamentos = medicamentos,
+                    isLoading = isLoading
+                )
 
                 Spacer(modifier = Modifier.height(24.dp))
             }
@@ -199,7 +196,7 @@ fun HomeScreen(
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
-                        imageVector = Icons.Outlined.DirectionsWalk,
+                        imageVector = Icons.AutoMirrored.Outlined.DirectionsWalk,
                         contentDescription = null,
                         tint = Color(0xFF8DE39D),
                         modifier = Modifier.size(20.dp)
@@ -212,6 +209,132 @@ fun HomeScreen(
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Bold,
                         color = corTextoPrincipal
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun DashboardProgressoCard(
+    medicamentos: List<MedicamentoHojeResponse>,
+    isLoading: Boolean
+) {
+    val totalTarefas = medicamentos.size
+    val tarefasFeitas = medicamentos.count { it.statusAdesaoHoje == "REALIZADO" }
+    val progresso = if (totalTarefas > 0) tarefasFeitas.toFloat() / totalTarefas else 0f
+    val progressoAnimado by animateFloatAsState(
+        targetValue = progresso,
+        animationSpec = tween(durationMillis = 700),
+        label = "dashboard_progress"
+    )
+    val porcentagem = (progressoAnimado * 100).toInt()
+    val mensagem = when {
+        totalTarefas == 0 -> "Sem tarefas para hoje"
+        tarefasFeitas == totalTarefas -> "Tudo feito por hoje!"
+        tarefasFeitas > 0 -> "Continue assim!"
+        else -> "Vamos começar?"
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(140.dp)
+            .background(Color(0xFF78A7FF), RoundedCornerShape(16.dp))
+            .padding(horizontal = 22.dp, vertical = 20.dp)
+    ) {
+        if (isLoading) {
+            CircularProgressIndicator(
+                color = Color.White,
+                modifier = Modifier.align(Alignment.Center)
+            )
+        } else {
+            Column(
+                modifier = Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier.size(82.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Canvas(modifier = Modifier.fillMaxSize()) {
+                            val strokeWidth = 8.dp.toPx()
+                            val arcSize = Size(
+                                width = size.width - strokeWidth,
+                                height = size.height - strokeWidth
+                            )
+                            val topLeft = androidx.compose.ui.geometry.Offset(
+                                strokeWidth / 2,
+                                strokeWidth / 2
+                            )
+
+                            drawArc(
+                                color = Color.White.copy(alpha = 0.28f),
+                                startAngle = -90f,
+                                sweepAngle = 360f,
+                                useCenter = false,
+                                topLeft = topLeft,
+                                size = arcSize,
+                                style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
+                            )
+                            drawArc(
+                                color = Color.White,
+                                startAngle = -90f,
+                                sweepAngle = 360f * progressoAnimado,
+                                useCenter = false,
+                                topLeft = topLeft,
+                                size = arcSize,
+                                style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
+                            )
+                        }
+
+                        Text(
+                            text = "$porcentagem%",
+                            color = Color.White,
+                            fontSize = 21.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.width(18.dp))
+
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "$tarefasFeitas de $totalTarefas tarefas feitas hoje",
+                            color = Color.White,
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.Bold,
+                            lineHeight = 26.sp
+                        )
+
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        Text(
+                            text = mensagem,
+                            color = Color.White.copy(alpha = 0.88f),
+                            fontSize = 15.sp
+                        )
+                    }
+                }
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(6.dp)
+                        .clip(RoundedCornerShape(50))
+                        .background(Color.White.copy(alpha = 0.28f))
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth(progressoAnimado.coerceIn(0f, 1f))
+                            .height(6.dp)
+                            .clip(RoundedCornerShape(50))
+                            .background(Color.White)
                     )
                 }
             }
@@ -322,7 +445,6 @@ fun MedicamentoCard(medicamento: MedicamentoHojeResponse) {
                 }
             }
 
-            // DETALHES EXPANDIDOS (Abaixo da linha)
             if (expandido) {
                 Spacer(modifier = Modifier.height(16.dp))
 

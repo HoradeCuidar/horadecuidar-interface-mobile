@@ -1,0 +1,511 @@
+package com.example.hdcfuncap.features
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.outlined.DirectionsWalk
+import androidx.compose.material.icons.outlined.Medication
+import androidx.compose.material.icons.outlined.Restaurant
+import androidx.compose.material.icons.outlined.Schedule
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.example.hdcfuncap.components.HdcBottomBar
+import com.example.hdcfuncap.network.ItemMedicacaoResponse
+import com.example.hdcfuncap.network.PrescricaoMedicamentoResponse
+import com.example.hdcfuncap.storage.UserPreferences
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+
+private data class MedicacaoComPrescricao(
+    val item: ItemMedicacaoResponse,
+    val prescricao: PrescricaoMedicamentoResponse
+)
+
+@Composable
+fun PrescricoesScreen(
+    onNavigate: (String) -> Unit,
+    viewModel: PrescricoesViewModel
+) {
+    val context = LocalContext.current
+    val userPreferences = remember { UserPreferences(context) }
+    val pacienteId by userPreferences.pacienteId.collectAsState(initial = null)
+
+    val prescricoes by viewModel.prescricoesMedicamentos.collectAsState()
+    val isLoading by viewModel.isLoading.collectAsState()
+    val errorMessage by viewModel.errorMessage.collectAsState()
+    var mostrandoMedicamentos by remember { mutableStateOf(false) }
+
+    LaunchedEffect(pacienteId) {
+        pacienteId?.let { viewModel.carregarPrescricoesMedicamentos(it) }
+    }
+
+    val medicacoes = remember(prescricoes) {
+        prescricoes.flatMap { prescricao ->
+            prescricao.itens.orEmpty().map { item ->
+                MedicacaoComPrescricao(item = item, prescricao = prescricao)
+            }
+        }
+    }
+
+    Scaffold(
+        bottomBar = {
+            HdcBottomBar(
+                currentScreen = "prescricoes",
+                onNavigate = onNavigate
+            )
+        }
+    ) { innerPadding ->
+        if (mostrandoMedicamentos) {
+            MedicamentosPrescritosContent(
+                innerPadding = innerPadding,
+                medicacoes = medicacoes,
+                isLoading = isLoading,
+                errorMessage = errorMessage,
+                onBack = { mostrandoMedicamentos = false }
+            )
+        } else {
+            PrescricoesCategoriasContent(
+                innerPadding = innerPadding,
+                totalMedicamentos = medicacoes.size,
+                nomeProfissional = prescricoes.firstOrNull()?.nomeProfissional,
+                isLoading = isLoading,
+                errorMessage = errorMessage,
+                onOpenMedicamentos = { mostrandoMedicamentos = true }
+            )
+        }
+    }
+}
+
+@Composable
+private fun PrescricoesCategoriasContent(
+    innerPadding: PaddingValues,
+    totalMedicamentos: Int,
+    nomeProfissional: String?,
+    isLoading: Boolean,
+    errorMessage: String?,
+    onOpenMedicamentos: () -> Unit
+) {
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xFFF8F9FA))
+            .padding(innerPadding)
+            .padding(horizontal = 24.dp),
+        contentPadding = PaddingValues(top = 40.dp, bottom = 32.dp)
+    ) {
+        item {
+            Text(
+                text = "Minhas Prescrições",
+                fontSize = 24.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF1E293B)
+            )
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            Text(
+                text = "Prescrições ativas do seu tratamento",
+                fontSize = 13.sp,
+                color = Color(0xFF757575)
+            )
+
+            Spacer(modifier = Modifier.height(18.dp))
+        }
+
+        if (isLoading) {
+            item {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(96.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator(color = Color(0xFF6B9DFE))
+                }
+            }
+        } else {
+            item {
+                CategoriaPrescricaoCard(
+                    icon = Icons.Outlined.Medication,
+                    iconTint = Color(0xFF6B9DFE),
+                    iconBackground = Color(0xFFEAF1FF),
+                    title = "Medicação",
+                    subtitle = "$totalMedicamentos medicamentos ativos",
+                    enabled = true,
+                    onClick = onOpenMedicamentos
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                CategoriaPrescricaoCard(
+                    icon = Icons.Outlined.Restaurant,
+                    iconTint = Color(0xFFF4A261),
+                    iconBackground = Color(0xFFFFF2E8),
+                    title = "Alimentação",
+                    subtitle = "Em breve",
+                    enabled = false,
+                    onClick = {}
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                CategoriaPrescricaoCard(
+                    icon = Icons.AutoMirrored.Outlined.DirectionsWalk,
+                    iconTint = Color(0xFF6FCF97),
+                    iconBackground = Color(0xFFEAF8F0),
+                    title = "Exercícios",
+                    subtitle = "Em breve",
+                    enabled = false,
+                    onClick = {}
+                )
+
+                Spacer(modifier = Modifier.height(14.dp))
+            }
+        }
+
+        errorMessage?.let { message ->
+            item {
+                Text(
+                    text = message,
+                    color = Color(0xFFC62828),
+                    fontSize = 13.sp,
+                    modifier = Modifier.padding(bottom = 12.dp)
+                )
+            }
+        }
+
+        item {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color(0xFFEAF1FF), RoundedCornerShape(12.dp))
+                    .padding(14.dp)
+            ) {
+                Text(
+                    text = if (nomeProfissional.isNullOrBlank()) {
+                        "Suas prescrições são atualizadas pelo seu médico. Em caso de dúvida, entre em contato."
+                    } else {
+                        "Suas prescrições são atualizadas por Dr. $nomeProfissional. Em caso de dúvida, entre em contato."
+                    },
+                    fontSize = 13.sp,
+                    color = Color(0xFF1E293B),
+                    lineHeight = 18.sp
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun CategoriaPrescricaoCard(
+    icon: ImageVector,
+    iconTint: Color,
+    iconBackground: Color,
+    title: String,
+    subtitle: String,
+    enabled: Boolean,
+    onClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(enabled = enabled, onClick = onClick),
+        shape = RoundedCornerShape(10.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .background(iconBackground, CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = iconTint,
+                    modifier = Modifier.size(24.dp)
+                )
+            }
+
+            Spacer(modifier = Modifier.width(14.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    color = Color(0xFF1E293B),
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = subtitle,
+                    color = Color(0xFF6B7280),
+                    fontSize = 13.sp
+                )
+            }
+
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = null,
+                tint = if (enabled) Color(0xFF6B7280) else Color(0xFFD0D5DD)
+            )
+        }
+    }
+}
+
+@Composable
+private fun MedicamentosPrescritosContent(
+    innerPadding: PaddingValues,
+    medicacoes: List<MedicacaoComPrescricao>,
+    isLoading: Boolean,
+    errorMessage: String?,
+    onBack: () -> Unit
+) {
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xFFF8F9FA))
+            .padding(innerPadding)
+            .padding(horizontal = 24.dp),
+        contentPadding = PaddingValues(top = 28.dp, bottom = 32.dp)
+    ) {
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = onBack) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Voltar",
+                        tint = Color(0xFF1E293B)
+                    )
+                }
+
+                Column(
+                    modifier = Modifier.weight(1f),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = "Medicação",
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF1E293B)
+                    )
+                    Text(
+                        text = resumoPeriodo(medicacoes),
+                        fontSize = 12.sp,
+                        color = Color(0xFF6B7280)
+                    )
+                }
+
+                Spacer(modifier = Modifier.size(48.dp))
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+        }
+
+        if (isLoading) {
+            item {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(120.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator(color = Color(0xFF6B9DFE))
+                }
+            }
+        } else if (errorMessage != null) {
+            item {
+                Text(
+                    text = errorMessage,
+                    color = Color(0xFFC62828),
+                    fontSize = 14.sp
+                )
+            }
+        } else if (medicacoes.isEmpty()) {
+            item {
+                Text(
+                    text = "Você ainda não possui medicamentos prescritos.",
+                    color = Color(0xFF6B7280),
+                    fontSize = 14.sp
+                )
+            }
+        } else {
+            items(medicacoes) { medicacao ->
+                MedicacaoPrescritaCard(medicacao)
+                Spacer(modifier = Modifier.height(14.dp))
+            }
+        }
+    }
+}
+
+@Composable
+private fun MedicacaoPrescritaCard(medicacao: MedicacaoComPrescricao) {
+    val item = medicacao.item
+    val prescricao = medicacao.prescricao
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(10.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                text = item.nomeMedicamento,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF1E293B)
+            )
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            InfoMedicamentoRow(
+                icon = Icons.Outlined.Medication,
+                text = item.dosagemFormatada.orEmpty().ifBlank { "Dosagem não informada" }
+            )
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            InfoMedicamentoRow(
+                icon = Icons.Outlined.Schedule,
+                text = item.frequencia.orEmpty().ifBlank { "Frequência não informada" }
+            )
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            InfoMedicamentoRow(
+                icon = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                text = item.viaAdministracao.orEmpty().ifBlank { "Via não informada" }
+            )
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            Box(
+                modifier = Modifier
+                    .background(Color(0xFFE8F7ED), RoundedCornerShape(50))
+                    .padding(horizontal = 12.dp, vertical = 6.dp)
+            ) {
+                Text(
+                    text = "Prescrição ativa",
+                    color = Color(0xFF57C47A),
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun InfoMedicamentoRow(
+    icon: ImageVector,
+    text: String
+) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Box(
+            modifier = Modifier
+                .size(30.dp)
+                .background(Color(0xFFF2F5FA), RoundedCornerShape(8.dp)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = Color(0xFF6B7280),
+                modifier = Modifier.size(17.dp)
+            )
+        }
+
+        Spacer(modifier = Modifier.width(10.dp))
+
+        Text(
+            text = text,
+            color = Color(0xFF1E293B),
+            fontSize = 14.sp
+        )
+    }
+}
+
+private fun resumoPeriodo(medicacoes: List<MedicacaoComPrescricao>): String {
+    val primeiraPrescricao = medicacoes.firstOrNull()?.prescricao
+        ?: return "Prescrições ativas"
+
+    val inicio = formatarData(primeiraPrescricao.dataInicio)
+    val fim = formatarData(primeiraPrescricao.dataFim)
+
+    return if (inicio.isNotBlank() && fim.isNotBlank()) {
+        "Prescrição ativa • $inicio a $fim"
+    } else {
+        "Prescrição ativa"
+    }
+}
+
+private fun formatarData(valor: String?): String {
+    if (valor.isNullOrBlank()) return ""
+
+    val limpo = valor.trim()
+    if (limpo.all { it.isDigit() }) {
+        return try {
+            SimpleDateFormat("dd/MM/yyyy", Locale.forLanguageTag("pt-BR"))
+                .format(Date(limpo.toLong()))
+        } catch (e: Exception) {
+            ""
+        }
+    }
+
+    val data = limpo.substringBefore("T").substringBefore(" ")
+    val partes = data.split("-")
+    return if (partes.size == 3) {
+        "${partes[2]}/${partes[1]}/${partes[0]}"
+    } else {
+        data
+    }
+}

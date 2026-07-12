@@ -52,6 +52,14 @@ class UserPreferences(private val context: Context) {
         }
     }
 
+    suspend fun clearSession() {
+        context.dataStore.edit { preferences ->
+            preferences.remove(TOKEN_KEY)
+            preferences.remove(PACIENTE_ID_KEY)
+            preferences.remove(PACIENTE_NOME_KEY)
+        }
+    }
+
     suspend fun saveUser(username: String, remember: Boolean) {
         context.dataStore.edit { preferences ->
             if (remember) {

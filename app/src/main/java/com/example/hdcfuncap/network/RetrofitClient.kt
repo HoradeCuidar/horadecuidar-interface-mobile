@@ -10,6 +10,12 @@ import retrofit2.converter.gson.GsonConverterFactory
 
 object RetrofitClient {
     private const val BASE_URL = "http://10.0.2.2:8080/api/"
+    @Volatile
+    private var sessionExpiredHandler: (() -> Unit)? = null
+
+    fun setSessionExpiredHandler(handler: (() -> Unit)?) {
+        sessionExpiredHandler = handler
+    }
 
     fun getAuthApi(context: Context): AuthApi {
         val userPreferences = UserPreferences(context)
@@ -26,7 +32,12 @@ object RetrofitClient {
                 originalRequest
             }
 
-            chain.proceed(newRequest)
+            val response = chain.proceed(newRequest)
+            val statusCode = response.code()
+            if (!token.isNullOrEmpty() && (statusCode == 401 || statusCode == 403)) {
+                sessionExpiredHandler?.invoke()
+            }
+            response
         }
 
         val okHttpClient = OkHttpClient.Builder()
