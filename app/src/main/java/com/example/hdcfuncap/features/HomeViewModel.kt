@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.hdcfuncap.network.AuthApi
+import com.example.hdcfuncap.network.AtualizarAdesaoRequest
 import com.example.hdcfuncap.network.MedicamentoHojeResponse
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -24,8 +25,35 @@ class HomeViewModel(private val authApi: AuthApi) : ViewModel() {
         viewModelScope.launch {
             _isLoading.value = true
             try {
-                val resposta = authApi.getMedicamentosHoje(pacienteId)
-                _medicamentos.value = resposta
+                val medicamentosHoje = authApi.getMedicamentosHoje(pacienteId)
+                val medicamentosSemRegistro = medicamentosHoje.filter { it.statusAdesaoHoje == null }
+
+                if (medicamentosSemRegistro.isNotEmpty()) {
+                    medicamentosSemRegistro.forEach { medicamento ->
+                        val request = AtualizarAdesaoRequest(
+                            itemMedicacaoId = medicamento.itemId,
+                            status = "NAO_REALIZADO",
+                            observacao = medicamento.observacao ?: ""
+                        )
+
+                        if (medicamento.adesaoId != null) {
+                            authApi.registrarAdesao(
+                                pacienteId = pacienteId,
+                                adesaoId = medicamento.adesaoId,
+                                request = request
+                            )
+                        } else {
+                            authApi.criarAdesao(
+                                pacienteId = pacienteId,
+                                request = request
+                            )
+                        }
+                    }
+
+                    _medicamentos.value = authApi.getMedicamentosHoje(pacienteId)
+                } else {
+                    _medicamentos.value = medicamentosHoje
+                }
             } catch (e: Exception) {
                 e.printStackTrace()
             } finally {

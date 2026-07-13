@@ -19,6 +19,7 @@ class UserPreferences(private val context: Context) {
 
         val PACIENTE_ID_KEY = longPreferencesKey("paciente_id")
         val PACIENTE_NOME_KEY = stringPreferencesKey("paciente_nome")
+        val FONT_SIZE_KEY = stringPreferencesKey("font_size")
     }
     val pacienteId: Flow<Long?> = context.dataStore.data.map { preferences ->
         preferences[PACIENTE_ID_KEY]
@@ -39,6 +40,11 @@ class UserPreferences(private val context: Context) {
     val isRememberMeChecked: Flow<Boolean> = context.dataStore.data.map { preferences ->
         preferences[REMEMBER_ME_KEY] ?: false
     }
+
+    val fontSize: Flow<String> = context.dataStore.data.map { preferences ->
+        preferences[FONT_SIZE_KEY] ?: "media"
+    }
+
     suspend fun savePaciente(id: Long, nome: String) {
         context.dataStore.edit { preferences ->
             preferences[PACIENTE_ID_KEY] = id
@@ -57,6 +63,12 @@ class UserPreferences(private val context: Context) {
             preferences.remove(TOKEN_KEY)
             preferences.remove(PACIENTE_ID_KEY)
             preferences.remove(PACIENTE_NOME_KEY)
+        }
+    }
+
+    suspend fun saveFontSize(fontSize: String) {
+        context.dataStore.edit { preferences ->
+            preferences[FONT_SIZE_KEY] = fontSize
         }
     }
 

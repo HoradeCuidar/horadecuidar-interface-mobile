@@ -10,22 +10,28 @@ import androidx.annotation.RequiresApi
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.Density
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.hdcfuncap.features.LoginScreen
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.example.hdcfuncap.features.ConfiguracoesScreen
 import com.example.hdcfuncap.features.HomeScreen
 import com.example.hdcfuncap.features.HomeViewModel
 import com.example.hdcfuncap.features.HomeViewModelFactory
+import com.example.hdcfuncap.features.PerfilScreen
 import com.example.hdcfuncap.features.PrescricoesScreen
 import com.example.hdcfuncap.features.PrescricoesViewModel
 import com.example.hdcfuncap.features.PrescricoesViewModelFactory
@@ -53,6 +59,13 @@ class MainActivity : ComponentActivity() {
             val isHandlingExpiredSession = remember { AtomicBoolean(false) }
             var sessionChecked by remember { mutableStateOf(false) }
             var startDestination by remember { mutableStateOf("login") }
+            val selectedFontSize by userPreferences.fontSize.collectAsState(initial = "media")
+            val currentDensity = LocalDensity.current
+            val fontScale = when (selectedFontSize) {
+                "pequena" -> 0.88f
+                "grande" -> 1.16f
+                else -> 1f
+            }
 
             LaunchedEffect(Unit) {
                 val token = userPreferences.getAuthToken()
@@ -91,7 +104,13 @@ class MainActivity : ComponentActivity() {
                 return@setContent
             }
 
-            NavHost(navController = navController, startDestination = startDestination) {
+            CompositionLocalProvider(
+                LocalDensity provides Density(
+                    density = currentDensity.density,
+                    fontScale = fontScale
+                )
+            ) {
+                NavHost(navController = navController, startDestination = startDestination) {
                 composable("login") {
                     LoginScreen(
                         onLoginSuccess = {
@@ -135,6 +154,30 @@ class MainActivity : ComponentActivity() {
                         viewModel = prescricoesViewModel
                     )
                 }
+                composable("perfil") {
+                    PerfilScreen(
+                        onNavigate = { rota -> navController.navigate(rota) },
+                        onOpenSettings = { navController.navigate("configuracoes") },
+                        onLogout = {
+                            isHandlingExpiredSession.set(false)
+                            CoroutineScope(Dispatchers.Main).launch {
+                                userPreferences.clearSession()
+                                navController.navigate("login") {
+                                    popUpTo("home") { inclusive = true }
+                                    launchSingleTop = true
+                                }
+                            }
+                        }
+                    )
+                }
+                composable("configuracoes") {
+                    ConfiguracoesScreen(
+                        onNavigate = { rota -> navController.navigate(rota) },
+                        onBack = {
+                            navController.popBackStack("perfil", inclusive = false)
+                        }
+                    )
+                }
                 composable("registrar") {
                     val context = LocalContext.current
                     val authApi = remember { RetrofitClient.getAuthApi(context) }
@@ -147,6 +190,7 @@ class MainActivity : ComponentActivity() {
                         onNavigate = { rota -> navController.navigate(rota) },
                         viewModel = registrarViewModel
                     )
+                }
                 }
             }
         }
