@@ -1,7 +1,5 @@
 package com.example.hdcfuncap.features
 
-import android.os.Build
-import androidx.annotation.RequiresApi
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -50,7 +48,6 @@ import com.example.hdcfuncap.components.HdcBottomBar
 import com.example.hdcfuncap.network.MedicamentoHojeResponse
 import com.example.hdcfuncap.storage.UserPreferences
 
-@RequiresApi(Build.VERSION_CODES.O)
 @Composable
 fun HomeScreen(
     onNavigate: (String) -> Unit,
@@ -64,10 +61,10 @@ fun HomeScreen(
 
     val medicamentos by viewModel.medicamentos.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
+    val errorMessage by viewModel.errorMessage.collectAsState()
 
     LaunchedEffect(pacienteId) {
         pacienteId?.let { id ->
-            android.util.Log.d("HDC_TESTE", "Buscando dados do paciente dinâmico: $id")
             viewModel.carregarDados(id)
         }
     }
@@ -127,6 +124,17 @@ fun HomeScreen(
                 )
 
                 Spacer(modifier = Modifier.height(24.dp))
+            }
+
+            errorMessage?.let { message ->
+                item {
+                    Text(
+                        text = message,
+                        color = Color(0xFFC62828),
+                        fontSize = 13.sp,
+                        modifier = Modifier.padding(bottom = 16.dp)
+                    )
+                }
             }
 
             item {

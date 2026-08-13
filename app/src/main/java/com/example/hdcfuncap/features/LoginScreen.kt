@@ -1,7 +1,7 @@
 package com.example.hdcfuncap.features
 
-import android.widget.Toast
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -43,6 +43,7 @@ fun LoginScreen(
     var senhaVisivel by remember { mutableStateOf(false) }
     var lembrarDeMim by remember { mutableStateOf(false) }
     var isLoading by remember { mutableStateOf(false) }
+    var loginMessage by remember { mutableStateOf<String?>(null) }
 
     val corFundoInput = Color(0xFFEDF4FF)
     val corTextoCinza = Color(0xFF757575)
@@ -161,24 +162,36 @@ fun LoginScreen(
 
         Spacer(modifier = Modifier.height(24.dp))
 
+        loginMessage?.let { message ->
+            LoginFeedbackMessage(message = message)
+            Spacer(modifier = Modifier.height(14.dp))
+        }
+
         Button(
             enabled = !isLoading,
             onClick = {
                 isLoading = true
+                loginMessage = null
 
                 coroutineScope.launch {
                     try {
                         val request = LoginRequest(username = usuario, senha = senha)
                         val response = RetrofitClient.getAuthApi(context).logar(request)
+                        val token = response.token
+                        val pacienteId = response.id
 
-                        userPreferences.saveToken(response.token)
-                        userPreferences.savePaciente(id = response.id, nome = usuario)
+                        if (token.isNullOrBlank() || pacienteId == null) {
+                            loginMessage = "Não foi possível validar sua sessão. Tente novamente."
+                            return@launch
+                        }
+
+                        userPreferences.saveToken(token)
+                        userPreferences.savePaciente(id = pacienteId, nome = usuario)
                         userPreferences.saveUser(username = usuario, remember = lembrarDeMim)
 
-                        Toast.makeText(context, "Sucesso!", Toast.LENGTH_SHORT).show()
                         onLoginSuccess()
                     } catch (e: Exception) {
-                        Toast.makeText(context, "Falha no login", Toast.LENGTH_SHORT).show()
+                        loginMessage = "Usuário ou senha inválidos. Confira os dados enviados pelo seu médico."
                     } finally {
                         isLoading = false
                     }
@@ -217,5 +230,24 @@ fun LoginScreen(
                 fontWeight = FontWeight.SemiBold
             )
         }
+    }
+}
+
+@Composable
+private fun LoginFeedbackMessage(message: String) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Color(0xFFFFECEC), RoundedCornerShape(12.dp))
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = message,
+            color = Color(0xFFE5484D),
+            fontSize = 13.sp,
+            fontWeight = FontWeight.SemiBold,
+            lineHeight = 18.sp
+        )
     }
 }

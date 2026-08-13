@@ -80,7 +80,7 @@ fun PrescricoesScreen(
 
     val medicacoes = remember(prescricoes) {
         prescricoes.flatMap { prescricao ->
-            prescricao.itens.orEmpty().map { item ->
+            prescricao.itensPrescricao().map { item ->
                 MedicacaoComPrescricao(item = item, prescricao = prescricao)
             }
         }
@@ -399,7 +399,7 @@ private fun MedicacaoPrescritaCard(medicacao: MedicacaoComPrescricao) {
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(
-                text = item.nomeMedicamento,
+                text = item.nomeMedicamento.orEmpty().ifBlank { "Medicamento" },
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Bold,
                 color = Color(0xFF1E293B)
@@ -409,21 +409,27 @@ private fun MedicacaoPrescritaCard(medicacao: MedicacaoComPrescricao) {
 
             InfoMedicamentoRow(
                 icon = Icons.Outlined.Medication,
-                text = item.dosagemFormatada.orEmpty().ifBlank { "Dosagem não informada" }
+                text = item.dosagemFormatada
+                    .orEmpty()
+                    .ifBlank { formatarDosagemItem(item) }
+                    .ifBlank { "Dosagem não informada" }
             )
 
             Spacer(modifier = Modifier.height(10.dp))
 
             InfoMedicamentoRow(
                 icon = Icons.Outlined.Schedule,
-                text = item.frequencia.orEmpty().ifBlank { "Frequência não informada" }
+                text = item.frequencia
+                    .orEmpty()
+                    .ifBlank { formatarFrequenciaItem(item) }
+                    .ifBlank { "Frequência não informada" }
             )
 
             Spacer(modifier = Modifier.height(10.dp))
 
             InfoMedicamentoRow(
                 icon = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                text = item.viaAdministracao.orEmpty().ifBlank { "Via não informada" }
+                text = formatarViaItem(item.viaAdministracao).orEmpty().ifBlank { "Via não informada" }
             )
 
             Spacer(modifier = Modifier.height(14.dp))
@@ -472,6 +478,54 @@ private fun InfoMedicamentoRow(
             fontSize = 14.sp
         )
     }
+}
+
+private fun PrescricaoMedicamentoResponse.itensPrescricao(): List<ItemMedicacaoResponse> {
+    return itens ?: medicacoes ?: emptyList()
+}
+
+private fun formatarDosagemItem(item: ItemMedicacaoResponse): String {
+    val valor = item.dosagemValor ?: return ""
+    val unidade = item.dosagemUnidade?.lowercase().orEmpty()
+    return "${formatarNumero(valor)} $unidade".trim()
+}
+
+private fun formatarFrequenciaItem(item: ItemMedicacaoResponse): String {
+    val doses = item.quantidadeDoses ?: return ""
+    val intervalo = item.intervaloValor ?: 1
+    val tipo = item.intervaloTipo ?: return ""
+    val vez = if (doses == 1) "vez" else "vezes"
+
+    val unidadeTempo = when (tipo.uppercase()) {
+        "HORA" -> if (intervalo == 1) "hora" else "horas"
+        "DIA" -> if (intervalo == 1) "dia" else "dias"
+        "SEMANA" -> if (intervalo == 1) "semana" else "semanas"
+        "MES" -> if (intervalo == 1) "mês" else "meses"
+        else -> tipo.lowercase()
+    }
+
+    return if (intervalo == 1 && tipo.uppercase() != "HORA") {
+        val preposicao = if (tipo.uppercase() == "DIA") "ao" else "por"
+        "$doses $vez $preposicao $unidadeTempo"
+    } else {
+        "$doses $vez a cada $intervalo $unidadeTempo"
+    }
+}
+
+private fun formatarViaItem(via: String?): String? {
+    return when (via) {
+        null -> null
+        "ORAL" -> "Via oral"
+        "SUBLINGUAL" -> "Via sublingual"
+        "INJETAVEL" -> "Via injetável"
+        "TOPICA" -> "Via tópica"
+        "INALATORIA" -> "Via inalatória"
+        else -> via
+    }
+}
+
+private fun formatarNumero(valor: Double): String {
+    return if (valor % 1.0 == 0.0) valor.toInt().toString() else valor.toString()
 }
 
 private fun resumoPeriodo(medicacoes: List<MedicacaoComPrescricao>): String {

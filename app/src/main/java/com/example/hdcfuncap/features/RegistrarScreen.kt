@@ -36,6 +36,7 @@ fun RegistrarScreen(
 
     val medicamentos by viewModel.medicamentos.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
+    val errorMessage by viewModel.errorMessage.collectAsState()
 
     LaunchedEffect(pacienteId) {
         pacienteId?.let { id ->
@@ -64,6 +65,17 @@ fun RegistrarScreen(
                 Spacer(modifier = Modifier.height(24.dp))
             }
 
+            errorMessage?.let { message ->
+                item {
+                    Text(
+                        text = message,
+                        color = Color(0xFFC62828),
+                        fontSize = 13.sp,
+                        modifier = Modifier.padding(bottom = 16.dp)
+                    )
+                }
+            }
+
             if (isLoading) {
                 item { CircularProgressIndicator(modifier = Modifier.fillMaxWidth().wrapContentWidth(Alignment.CenterHorizontally)) }
             } else {
@@ -73,10 +85,8 @@ fun RegistrarScreen(
                         onRegistrar = { status ->
                             pacienteId?.let { id ->
                                 viewModel.registrarAdesao(
-                                    itemId = med.itemId,
-                                    adesaoId = med.adesaoId,
+                                    medicamento = med,
                                     status = status,
-                                    observacao = med.observacao ?: "",
                                     pacienteId = id
                                 )
                             }

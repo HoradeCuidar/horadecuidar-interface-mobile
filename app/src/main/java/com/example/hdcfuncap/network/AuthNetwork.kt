@@ -7,19 +7,24 @@ import retrofit2.http.POST
 import retrofit2.http.GET
 import retrofit2.http.PUT
 import retrofit2.http.Path
+import retrofit2.http.Query
 
 data class LoginRequest(
     val username: String,
     val senha: String
 )
 data class LoginResponse(
-    val id: Long,
-    val token: String,
-    val nome: String
-
+    val id: Long?,
+    val token: String?,
+    val nome: String?,
+    val role: String?
 )
 data class AtualizarAdesaoRequest(
+    val ocorrenciaId: Long,
     val itemMedicacaoId: Long,
+    val ordemNoDia: Int?,
+    val dataPrevista: String?,
+    val quantidadeDiaria: Int?,
     val status: String,
     val observacao: String
 )
@@ -35,23 +40,96 @@ data class ResetarSenhaRequest(
 )
 
 data class MessageResponse(
-    val message: String
+    val message: String?
+)
+
+data class PacienteProfileResponse(
+    val id: Long?,
+    val nome: String?,
+    val email: String?,
+    val username: String?,
+    val dataDeNascimento: String?,
+    val role: String?,
+    val status: String?,
+    val telefone: String?,
+    val rua: String?,
+    val bairro: String?,
+    val estado: String?,
+    val cidade: String?,
+    val numeroDaCasa: String?,
+    val genero: String?,
+    val doencas: List<DoencaProfileResponse>?,
+    val observacoes: String?,
+    val fotoDePerfil: String?
+)
+
+data class PacienteProfileUpdateRequest(
+    val nome: String,
+    val email: String,
+    val telefone: String,
+    val genero: String,
+    val dataDeNascimento: String,
+    val rua: String?,
+    val bairro: String?,
+    val estado: String?,
+    val cidade: String?,
+    val numeroDaCasa: String?
+)
+
+data class DoencaProfileResponse(
+    val id: Long?,
+    val nome: String?
 )
 
 data class PrescricaoMedicamentoResponse(
-    val id: String,
+    val id: String?,
     val nomeProfissional: String?,
     val dataInicio: String?,
     val dataFim: String?,
-    val itens: List<ItemMedicacaoResponse>?
+    val itens: List<ItemMedicacaoResponse>?,
+    val medicacoes: List<ItemMedicacaoResponse>?
 )
 
 data class ItemMedicacaoResponse(
-    val itemId: Long,
-    val nomeMedicamento: String,
+    val itemId: Long?,
+    val id: Long?,
+    val nomeMedicamento: String?,
     val dosagemFormatada: String?,
     val frequencia: String?,
-    val viaAdministracao: String?
+    val viaAdministracao: String?,
+    val dosagemValor: Double?,
+    val dosagemUnidade: String?,
+    val quantidadeDoses: Int?,
+    val intervaloValor: Int?,
+    val intervaloTipo: String?
+)
+
+data class MedicamentosDiaResponse(
+    val data: String?,
+    val ocorrencias: List<OcorrenciaMedicamentoResponse>?
+)
+
+data class OcorrenciaMedicamentoResponse(
+    val id: Long?,
+    val prescricaoId: String?,
+    val itemMedicacao: ItemMedicacaoOcorrenciaResponse?,
+    val dataPrevista: String?,
+    val ordemNoDia: Int?,
+    val dataHoraRegistro: String?,
+    val observacao: String?
+)
+
+data class ItemMedicacaoOcorrenciaResponse(
+    val id: Long?,
+    val nomeMedicamento: String?,
+    val dosagemValor: Double?,
+    val dosagemUnidade: String?,
+    val quantidadeDoses: Int?,
+    val intervaloValor: Int?,
+    val intervaloTipo: String?,
+    val viaAdministracao: String?,
+    val ativo: Boolean?,
+    val observacao: String?
 )
 
 interface AuthApi {
@@ -68,10 +146,19 @@ interface AuthApi {
         @Body request: ResetarSenhaRequest
     ): MessageResponse
 
-    @GET("pacientes/{id}/prescricoes/medicamentos/paciente/hoje")
+    @GET("paciente/profile")
+    suspend fun getPacienteProfile(): PacienteProfileResponse
+
+    @PUT("paciente/perfil")
+    suspend fun atualizarPacientePerfil(
+        @Body request: PacienteProfileUpdateRequest
+    ): PacienteProfileResponse
+
+    @GET("pacientes/{id}/prescricoes/medicamentos/paciente/ocorrencias-medicamentos")
     suspend fun getMedicamentosHoje(
-        @Path("id") pacienteId: Long
-    ): List<MedicamentoHojeResponse>
+        @Path("id") pacienteId: Long,
+        @Query("data") data: String
+    ): MedicamentosDiaResponse
 
     @GET("pacientes/{id}/prescricoes/medicamentos/paciente/ativas")
     suspend fun getPrescricoesMedicamentos(

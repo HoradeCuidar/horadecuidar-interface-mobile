@@ -6,6 +6,10 @@ import androidx.lifecycle.viewModelScope
 import com.example.hdcfuncap.network.AuthApi
 import com.example.hdcfuncap.network.AtualizarAdesaoRequest
 import com.example.hdcfuncap.network.MedicamentoHojeResponse
+import com.example.hdcfuncap.network.toMedicamentosHoje
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -19,67 +23,60 @@ class RegistrarViewModel(private val authApi: AuthApi) : ViewModel() {
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
+    private val _errorMessage = MutableStateFlow<String?>(null)
+    val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
+
     fun carregarDados(pacienteId: Long) {
         viewModelScope.launch {
             _isLoading.value = true
+            _errorMessage.value = null
             try {
-                val medicamentosHoje = authApi.getMedicamentosHoje(pacienteId)
-                val medicamentosPendentes = medicamentosHoje.filter { it.statusAdesaoHoje == null }
-
-                if (medicamentosPendentes.isNotEmpty()) {
-                    medicamentosPendentes.forEach { medicamento ->
-                        val request = AtualizarAdesaoRequest(
-                            itemMedicacaoId = medicamento.itemId,
-                            status = "NAO_REALIZADO",
-                            observacao = medicamento.observacao ?: ""
-                        )
-
-                        if (medicamento.adesaoId != null) {
-                            authApi.registrarAdesao(
-                                pacienteId = pacienteId,
-                                adesaoId = medicamento.adesaoId,
-                                request = request
-                            )
-                        } else {
-                            authApi.criarAdesao(
-                                pacienteId = pacienteId,
-                                request = request
-                            )
-                        }
-                    }
-
-                    _medicamentos.value = authApi.getMedicamentosHoje(pacienteId)
-                } else {
-                    _medicamentos.value = medicamentosHoje
-                }
+                _medicamentos.value = authApi
+                    .getMedicamentosHoje(pacienteId, dataAtualIso())
+                    .toMedicamentosHoje()
             } catch (e: Exception) {
-                e.printStackTrace()
+                _errorMessage.value = "Não foi possível carregar os registros de hoje."
+                _medicamentos.value = emptyList()
             } finally {
                 _isLoading.value = false
             }
         }
     }
 
-    fun registrarAdesao(itemId: Long, adesaoId: Long?, status: String, observacao: String, pacienteId: Long) {
+    fun registrarAdesao(medicamento: MedicamentoHojeResponse, status: String, pacienteId: Long) {
         viewModelScope.launch {
+            _errorMessage.value = null
             try {
+                val ocorrenciaId = medicamento.ocorrenciaId ?: return@launch
                 val request = AtualizarAdesaoRequest(
-                    itemMedicacaoId = itemId,
+                    ocorrenciaId = ocorrenciaId,
+                    itemMedicacaoId = medicamento.itemId,
+                    ordemNoDia = medicamento.ordemNoDia,
+                    dataPrevista = medicamento.dataPrevista,
+                    quantidadeDiaria = medicamento.quantidadeDiaria,
                     status = status,
-                    observacao = observacao
+                    observacao = medicamento.observacao ?: ""
                 )
 
-                if (adesaoId != null) {
-                    authApi.registrarAdesao(pacienteId = pacienteId, adesaoId = adesaoId, request = request)
+                if (medicamento.adesaoId != null) {
+                    authApi.registrarAdesao(
+                        pacienteId = pacienteId,
+                        adesaoId = medicamento.adesaoId,
+                        request = request
+                    )
                 } else {
                     authApi.criarAdesao(pacienteId = pacienteId, request = request)
                 }
 
                 carregarDados(pacienteId)
             } catch (e: Exception) {
-                e.printStackTrace()
+                _errorMessage.value = "Não foi possível salvar este registro."
             }
         }
+    }
+
+    private fun dataAtualIso(): String {
+        return SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
     }
 }
 

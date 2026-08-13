@@ -4,11 +4,18 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.hdcfuncap.network.AuthApi
+import com.example.hdcfuncap.network.ItemMedicacaoResponse
 import com.example.hdcfuncap.network.PrescricaoMedicamentoResponse
+import com.example.hdcfuncap.network.toMedicamentosHoje
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import org.json.JSONObject
+import retrofit2.HttpException
 
 class PrescricoesViewModel(private val authApi: AuthApi) : ViewModel() {
 
@@ -29,14 +36,89 @@ class PrescricoesViewModel(private val authApi: AuthApi) : ViewModel() {
             _errorMessage.value = null
 
             try {
-                _prescricoesMedicamentos.value = authApi.getPrescricoesMedicamentos(pacienteId)
+                val pacienteAutenticado = authApi.getPacienteProfile()
+                val idParaBusca = pacienteAutenticado.id ?: pacienteId
+                _prescricoesMedicamentos.value = try {
+                    authApi.getPrescricoesMedicamentos(idParaBusca)
+                } catch (e: HttpException) {
+                    if (e.code() == 500 && erroDeAtivoNulo(e)) {
+                        carregarMedicamentosDoDiaComoPrescricao(idParaBusca)
+                    } else {
+                        throw e
+                    }
+                }
             } catch (e: Exception) {
-                _errorMessage.value = "Não foi possível carregar suas prescrições."
+                _errorMessage.value = when (e) {
+                    is HttpException -> {
+                        val detalhe = e.response()?.errorBody()?.string()?.let(::extrairMensagemErro)
+                        if (detalhe.isNullOrBlank()) {
+                            "Não foi possível carregar suas prescrições. Código ${e.code()}."
+                        } else {
+                            "Não foi possível carregar suas prescrições. Código ${e.code()}: $detalhe"
+                        }
+                    }
+                    else -> "Não foi possível carregar suas prescrições."
+                }
                 _prescricoesMedicamentos.value = emptyList()
             } finally {
                 _isLoading.value = false
             }
         }
+    }
+
+    private fun extrairMensagemErro(body: String): String {
+        return try {
+            JSONObject(body).optString("message").ifBlank {
+                JSONObject(body).optString("mensagem")
+            }
+        } catch (e: Exception) {
+            body
+        }
+    }
+
+    private suspend fun carregarMedicamentosDoDiaComoPrescricao(
+        pacienteId: Long
+    ): List<PrescricaoMedicamentoResponse> {
+        val hoje = dataAtualIso()
+        val medicamentosHoje = authApi
+            .getMedicamentosHoje(pacienteId, hoje)
+            .toMedicamentosHoje()
+
+        if (medicamentosHoje.isEmpty()) return emptyList()
+
+        return listOf(
+            PrescricaoMedicamentoResponse(
+                id = "ocorrencias-$hoje",
+                nomeProfissional = null,
+                dataInicio = hoje,
+                dataFim = null,
+                itens = medicamentosHoje.map { medicamento ->
+                    ItemMedicacaoResponse(
+                        itemId = medicamento.itemId,
+                        id = medicamento.itemId,
+                        nomeMedicamento = medicamento.nomeMedicamento,
+                        dosagemFormatada = medicamento.dosagemFormatada,
+                        frequencia = medicamento.frequencia,
+                        viaAdministracao = medicamento.viaAdministracao,
+                        dosagemValor = null,
+                        dosagemUnidade = null,
+                        quantidadeDoses = null,
+                        intervaloValor = null,
+                        intervaloTipo = null
+                    )
+                },
+                medicacoes = null
+            )
+        )
+    }
+
+    private fun erroDeAtivoNulo(e: HttpException): Boolean {
+        val detalhe = e.response()?.errorBody()?.string()?.let(::extrairMensagemErro).orEmpty()
+        return detalhe.contains("ItemMedicacao.ativo") || detalhe.contains("ativo")
+    }
+
+    private fun dataAtualIso(): String {
+        return SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
     }
 }
 

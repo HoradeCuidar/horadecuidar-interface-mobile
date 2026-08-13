@@ -167,8 +167,8 @@ fun RecuperarSenhaScreen(
                             )
 
                         emailEnviado = true
-                        mensagem = response.message
-                        Toast.makeText(context, response.message, Toast.LENGTH_LONG).show()
+                        mensagem = response.message ?: "Enviamos as instruções para o seu e-mail."
+                        Toast.makeText(context, mensagem, Toast.LENGTH_LONG).show()
                     } catch (e: Exception) {
                         mensagem = "Não foi possível solicitar a recuperação. Tente novamente."
                         Toast.makeText(context, mensagem, Toast.LENGTH_LONG).show()
@@ -312,7 +312,11 @@ fun RecuperarSenhaScreen(
                                     )
                                 )
 
-                            Toast.makeText(context, response.message, Toast.LENGTH_LONG).show()
+                            Toast.makeText(
+                                context,
+                                response.message ?: "Senha redefinida com sucesso.",
+                                Toast.LENGTH_LONG
+                            ).show()
                             onBackToLogin()
                         } catch (e: Exception) {
                             Toast.makeText(

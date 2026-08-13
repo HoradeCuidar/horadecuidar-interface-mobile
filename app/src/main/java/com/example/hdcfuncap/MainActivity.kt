@@ -1,12 +1,10 @@
 package com.example.hdcfuncap
 
-import android.os.Build
 import android.os.Bundle
 import android.util.Base64
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.annotation.RequiresApi
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.CircularProgressIndicator
@@ -31,7 +29,11 @@ import com.example.hdcfuncap.features.ConfiguracoesScreen
 import com.example.hdcfuncap.features.HomeScreen
 import com.example.hdcfuncap.features.HomeViewModel
 import com.example.hdcfuncap.features.HomeViewModelFactory
+import com.example.hdcfuncap.features.PerfilDetalhesScreen
+import com.example.hdcfuncap.features.PerfilEditarScreen
 import com.example.hdcfuncap.features.PerfilScreen
+import com.example.hdcfuncap.features.PerfilViewModel
+import com.example.hdcfuncap.features.PerfilViewModelFactory
 import com.example.hdcfuncap.features.PrescricoesScreen
 import com.example.hdcfuncap.features.PrescricoesViewModel
 import com.example.hdcfuncap.features.PrescricoesViewModelFactory
@@ -48,7 +50,6 @@ import org.json.JSONObject
 import java.util.concurrent.atomic.AtomicBoolean
 
 class MainActivity : ComponentActivity() {
-    @RequiresApi(Build.VERSION_CODES.O)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -155,8 +156,16 @@ class MainActivity : ComponentActivity() {
                     )
                 }
                 composable("perfil") {
+                    val context = LocalContext.current
+                    val authApi = remember { RetrofitClient.getAuthApi(context) }
+                    val perfilViewModel: PerfilViewModel = viewModel(
+                        factory = PerfilViewModelFactory(authApi)
+                    )
+
                     PerfilScreen(
                         onNavigate = { rota -> navController.navigate(rota) },
+                        onOpenDetails = { navController.navigate("perfil-detalhes") },
+                        onOpenEdit = { navController.navigate("perfil-editar") },
                         onOpenSettings = { navController.navigate("configuracoes") },
                         onLogout = {
                             isHandlingExpiredSession.set(false)
@@ -167,7 +176,42 @@ class MainActivity : ComponentActivity() {
                                     launchSingleTop = true
                                 }
                             }
-                        }
+                        },
+                        viewModel = perfilViewModel
+                    )
+                }
+                composable("perfil-editar") {
+                    val context = LocalContext.current
+                    val authApi = remember { RetrofitClient.getAuthApi(context) }
+                    val perfilViewModel: PerfilViewModel = viewModel(
+                        factory = PerfilViewModelFactory(authApi)
+                    )
+
+                    PerfilEditarScreen(
+                        onBack = {
+                            navController.popBackStack("perfil", inclusive = false)
+                        },
+                        onSaved = {
+                            navController.navigate("perfil") {
+                                popUpTo("perfil") { inclusive = true }
+                                launchSingleTop = true
+                            }
+                        },
+                        viewModel = perfilViewModel
+                    )
+                }
+                composable("perfil-detalhes") {
+                    val context = LocalContext.current
+                    val authApi = remember { RetrofitClient.getAuthApi(context) }
+                    val perfilViewModel: PerfilViewModel = viewModel(
+                        factory = PerfilViewModelFactory(authApi)
+                    )
+
+                    PerfilDetalhesScreen(
+                        onBack = {
+                            navController.popBackStack("perfil", inclusive = false)
+                        },
+                        viewModel = perfilViewModel
                     )
                 }
                 composable("configuracoes") {
