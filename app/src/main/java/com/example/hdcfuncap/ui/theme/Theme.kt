@@ -1,51 +1,64 @@
 package com.example.hdcfuncap.ui.theme
 
-import android.app.Activity
-import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.dynamicDarkColorScheme
-import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.graphics.Color
 
 private val DarkColorScheme = darkColorScheme(
-    primary = Purple80,
-    secondary = PurpleGrey80,
-    tertiary = Pink80
+    primary = HdcBlue,
+    onPrimary = Color.White,
+    primaryContainer = HdcBlueDark,
+    onPrimaryContainer = Color.White,
+    secondary = HdcGreen,
+    onSecondary = HdcText,
+    tertiary = HdcOrange,
+    onTertiary = HdcText,
+    background = Color(0xFF111827),
+    onBackground = Color.White,
+    surface = Color(0xFF1F2937),
+    onSurface = Color.White,
+    surfaceVariant = Color(0xFF253044),
+    onSurfaceVariant = Color(0xFFE5E7EB),
+    error = HdcRed,
+    onError = Color.White,
+    outline = Color(0xFF64748B)
 )
 
 private val LightColorScheme = lightColorScheme(
-    primary = Purple40,
-    secondary = PurpleGrey40,
-    tertiary = Pink40
-
-    /* Other default colors to override
-    background = Color(0xFFFFFBFE),
-    surface = Color(0xFFFFFBFE),
+    primary = HdcBlue,
     onPrimary = Color.White,
-    onSecondary = Color.White,
-    onTertiary = Color.White,
-    onBackground = Color(0xFF1C1B1F),
-    onSurface = Color(0xFF1C1B1F),
-    */
+    primaryContainer = HdcBlueLight,
+    onPrimaryContainer = HdcText,
+    secondary = HdcGreen,
+    onSecondary = HdcText,
+    secondaryContainer = Color(0xFFE8F7ED),
+    onSecondaryContainer = HdcText,
+    tertiary = HdcOrange,
+    onTertiary = HdcText,
+    tertiaryContainer = Color(0xFFFFF2E8),
+    onTertiaryContainer = HdcText,
+    background = HdcBackground,
+    onBackground = HdcText,
+    surface = HdcSurface,
+    onSurface = HdcText,
+    surfaceVariant = HdcBlueLight,
+    onSurfaceVariant = HdcTextSecondary,
+    error = HdcRed,
+    onError = Color.White,
+    outline = Color(0xFFE2E8F0),
+    outlineVariant = Color(0xFFEAF1FF)
 )
 
 @Composable
 fun HdcFuncapTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
-    // Dynamic color is available on Android 12+
-    dynamicColor: Boolean = true,
+    dynamicColor: Boolean = false,
     content: @Composable () -> Unit
 ) {
     val colorScheme = when {
-        dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
-            val context = LocalContext.current
-            if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-        }
-
         darkTheme -> DarkColorScheme
         else -> LightColorScheme
     }

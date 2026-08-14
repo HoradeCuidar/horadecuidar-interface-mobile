@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.hdcfuncap.network.AuthApi
 import com.example.hdcfuncap.network.ItemMedicacaoResponse
+import com.example.hdcfuncap.network.OrientacaoFuncionalResponse
 import com.example.hdcfuncap.network.PrescricaoMedicamentoResponse
 import com.example.hdcfuncap.network.toMedicamentosHoje
 import java.text.SimpleDateFormat
@@ -24,11 +25,22 @@ class PrescricoesViewModel(private val authApi: AuthApi) : ViewModel() {
     val prescricoesMedicamentos: StateFlow<List<PrescricaoMedicamentoResponse>> =
         _prescricoesMedicamentos.asStateFlow()
 
+    private val _orientacoesFuncionais =
+        MutableStateFlow<List<OrientacaoFuncionalResponse>>(emptyList())
+    val orientacoesFuncionais: StateFlow<List<OrientacaoFuncionalResponse>> =
+        _orientacoesFuncionais.asStateFlow()
+
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
+    private val _isLoadingOrientacoes = MutableStateFlow(false)
+    val isLoadingOrientacoes: StateFlow<Boolean> = _isLoadingOrientacoes.asStateFlow()
+
     private val _errorMessage = MutableStateFlow<String?>(null)
     val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
+
+    private val _errorMessageOrientacoes = MutableStateFlow<String?>(null)
+    val errorMessageOrientacoes: StateFlow<String?> = _errorMessageOrientacoes.asStateFlow()
 
     fun carregarPrescricoesMedicamentos(pacienteId: Long) {
         viewModelScope.launch {
@@ -62,6 +74,26 @@ class PrescricoesViewModel(private val authApi: AuthApi) : ViewModel() {
                 _prescricoesMedicamentos.value = emptyList()
             } finally {
                 _isLoading.value = false
+            }
+        }
+    }
+
+    fun carregarOrientacoesFuncionais() {
+        viewModelScope.launch {
+            _isLoadingOrientacoes.value = true
+            _errorMessageOrientacoes.value = null
+
+            try {
+                _orientacoesFuncionais.value = authApi
+                    .getOrientacoesFuncionaisPaciente()
+                    .content
+                    .orEmpty()
+                    .filter { it.ativo != false }
+            } catch (e: Exception) {
+                _errorMessageOrientacoes.value = "Não foi possível carregar seus exercícios."
+                _orientacoesFuncionais.value = emptyList()
+            } finally {
+                _isLoadingOrientacoes.value = false
             }
         }
     }

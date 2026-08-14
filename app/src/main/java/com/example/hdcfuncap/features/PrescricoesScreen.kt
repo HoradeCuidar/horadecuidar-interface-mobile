@@ -25,6 +25,8 @@ import androidx.compose.material.icons.automirrored.outlined.DirectionsWalk
 import androidx.compose.material.icons.outlined.Medication
 import androidx.compose.material.icons.outlined.Restaurant
 import androidx.compose.material.icons.outlined.Schedule
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -49,6 +51,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.hdcfuncap.components.HdcBottomBar
 import com.example.hdcfuncap.network.ItemMedicacaoResponse
+import com.example.hdcfuncap.network.OrientacaoFuncionalResponse
 import com.example.hdcfuncap.network.PrescricaoMedicamentoResponse
 import com.example.hdcfuncap.storage.UserPreferences
 import java.text.SimpleDateFormat
@@ -60,6 +63,12 @@ private data class MedicacaoComPrescricao(
     val prescricao: PrescricaoMedicamentoResponse
 )
 
+private enum class TelaPrescricoes {
+    CATEGORIAS,
+    MEDICAMENTOS,
+    EXERCICIOS
+}
+
 @Composable
 fun PrescricoesScreen(
     onNavigate: (String) -> Unit,
@@ -70,12 +79,16 @@ fun PrescricoesScreen(
     val pacienteId by userPreferences.pacienteId.collectAsState(initial = null)
 
     val prescricoes by viewModel.prescricoesMedicamentos.collectAsState()
+    val orientacoes by viewModel.orientacoesFuncionais.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
+    val isLoadingOrientacoes by viewModel.isLoadingOrientacoes.collectAsState()
     val errorMessage by viewModel.errorMessage.collectAsState()
-    var mostrandoMedicamentos by remember { mutableStateOf(false) }
+    val errorMessageOrientacoes by viewModel.errorMessageOrientacoes.collectAsState()
+    var telaAtual by remember { mutableStateOf(TelaPrescricoes.CATEGORIAS) }
 
     LaunchedEffect(pacienteId) {
         pacienteId?.let { viewModel.carregarPrescricoesMedicamentos(it) }
+        viewModel.carregarOrientacoesFuncionais()
     }
 
     val medicacoes = remember(prescricoes) {
@@ -94,23 +107,42 @@ fun PrescricoesScreen(
             )
         }
     ) { innerPadding ->
-        if (mostrandoMedicamentos) {
-            MedicamentosPrescritosContent(
-                innerPadding = innerPadding,
-                medicacoes = medicacoes,
-                isLoading = isLoading,
-                errorMessage = errorMessage,
-                onBack = { mostrandoMedicamentos = false }
-            )
-        } else {
-            PrescricoesCategoriasContent(
-                innerPadding = innerPadding,
-                totalMedicamentos = medicacoes.size,
-                nomeProfissional = prescricoes.firstOrNull()?.nomeProfissional,
-                isLoading = isLoading,
-                errorMessage = errorMessage,
-                onOpenMedicamentos = { mostrandoMedicamentos = true }
-            )
+        when (telaAtual) {
+            TelaPrescricoes.MEDICAMENTOS -> {
+                MedicamentosPrescritosContent(
+                    innerPadding = innerPadding,
+                    medicacoes = medicacoes,
+                    isLoading = isLoading,
+                    errorMessage = errorMessage,
+                    onBack = { telaAtual = TelaPrescricoes.CATEGORIAS }
+                )
+            }
+
+            TelaPrescricoes.EXERCICIOS -> {
+                ExerciciosPrescritosContent(
+                    innerPadding = innerPadding,
+                    orientacoes = orientacoes,
+                    isLoading = isLoadingOrientacoes,
+                    errorMessage = errorMessageOrientacoes,
+                    onBack = { telaAtual = TelaPrescricoes.CATEGORIAS },
+                    onRegistrar = { onNavigate("registrar") }
+                )
+            }
+
+            TelaPrescricoes.CATEGORIAS -> {
+                PrescricoesCategoriasContent(
+                    innerPadding = innerPadding,
+                    totalMedicamentos = medicacoes.size,
+                    totalExercicios = orientacoes.size,
+                    nomeProfissional = prescricoes.firstOrNull()?.nomeProfissional,
+                    isLoading = isLoading || isLoadingOrientacoes,
+                    errorMessage = listOfNotNull(errorMessage, errorMessageOrientacoes)
+                        .joinToString("\n")
+                        .ifBlank { null },
+                    onOpenMedicamentos = { telaAtual = TelaPrescricoes.MEDICAMENTOS },
+                    onOpenExercicios = { telaAtual = TelaPrescricoes.EXERCICIOS }
+                )
+            }
         }
     }
 }
@@ -119,10 +151,12 @@ fun PrescricoesScreen(
 private fun PrescricoesCategoriasContent(
     innerPadding: PaddingValues,
     totalMedicamentos: Int,
+    totalExercicios: Int,
     nomeProfissional: String?,
     isLoading: Boolean,
     errorMessage: String?,
-    onOpenMedicamentos: () -> Unit
+    onOpenMedicamentos: () -> Unit,
+    onOpenExercicios: () -> Unit
 ) {
     LazyColumn(
         modifier = Modifier
@@ -193,9 +227,9 @@ private fun PrescricoesCategoriasContent(
                     iconTint = Color(0xFF6FCF97),
                     iconBackground = Color(0xFFEAF8F0),
                     title = "Exercícios",
-                    subtitle = "Em breve",
-                    enabled = false,
-                    onClick = {}
+                    subtitle = "$totalExercicios orientações ativas",
+                    enabled = true,
+                    onClick = onOpenExercicios
                 )
 
                 Spacer(modifier = Modifier.height(14.dp))
@@ -381,6 +415,187 @@ private fun MedicamentosPrescritosContent(
             items(medicacoes) { medicacao ->
                 MedicacaoPrescritaCard(medicacao)
                 Spacer(modifier = Modifier.height(14.dp))
+            }
+        }
+    }
+}
+
+@Composable
+private fun ExerciciosPrescritosContent(
+    innerPadding: PaddingValues,
+    orientacoes: List<OrientacaoFuncionalResponse>,
+    isLoading: Boolean,
+    errorMessage: String?,
+    onBack: () -> Unit,
+    onRegistrar: () -> Unit
+) {
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xFFF8F9FA))
+            .padding(innerPadding)
+            .padding(horizontal = 24.dp),
+        contentPadding = PaddingValues(top = 28.dp, bottom = 32.dp)
+    ) {
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = onBack) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Voltar",
+                        tint = Color(0xFF1E293B)
+                    )
+                }
+
+                Column(
+                    modifier = Modifier.weight(1f),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = "Exercícios",
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF1E293B)
+                    )
+                    Text(
+                        text = "${orientacoes.size} orientações ativas",
+                        fontSize = 12.sp,
+                        color = Color(0xFF6B7280)
+                    )
+                }
+
+                Spacer(modifier = Modifier.size(48.dp))
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+        }
+
+        if (isLoading) {
+            item {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(120.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator(color = Color(0xFF6B9DFE))
+                }
+            }
+        } else if (errorMessage != null) {
+            item {
+                Text(
+                    text = errorMessage,
+                    color = Color(0xFFC62828),
+                    fontSize = 14.sp
+                )
+            }
+        } else if (orientacoes.isEmpty()) {
+            item {
+                Text(
+                    text = "Você ainda não possui orientações de exercícios.",
+                    color = Color(0xFF6B7280),
+                    fontSize = 14.sp
+                )
+            }
+        } else {
+            items(orientacoes) { orientacao ->
+                ExercicioOrientacaoCard(
+                    orientacao = orientacao,
+                    onRegistrar = onRegistrar
+                )
+                Spacer(modifier = Modifier.height(14.dp))
+            }
+        }
+    }
+}
+
+@Composable
+private fun ExercicioOrientacaoCard(
+    orientacao: OrientacaoFuncionalResponse,
+    onRegistrar: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(10.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                text = orientacao.nome.orEmpty().ifBlank { "Exercício" },
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF1E293B)
+            )
+
+            val descricao = orientacao.descricao.orEmpty()
+            if (descricao.isNotBlank()) {
+                Spacer(modifier = Modifier.height(10.dp))
+                Text(
+                    text = descricao,
+                    fontSize = 14.sp,
+                    color = Color(0xFF4B5563),
+                    lineHeight = 19.sp
+                )
+            }
+
+            val finalidade = orientacao.finalidade.orEmpty()
+            if (finalidade.isNotBlank()) {
+                Spacer(modifier = Modifier.height(12.dp))
+                InfoMedicamentoRow(
+                    icon = Icons.AutoMirrored.Outlined.DirectionsWalk,
+                    text = finalidade
+                )
+            }
+
+            val tags = orientacao.tags.orEmpty()
+                .mapNotNull { it.nome }
+                .filter { it.isNotBlank() }
+
+            if (tags.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    text = tags.joinToString(" • "),
+                    color = Color(0xFF6B7280),
+                    fontSize = 12.sp,
+                    lineHeight = 17.sp
+                )
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .background(Color(0xFFEAF8F0), RoundedCornerShape(50))
+                        .padding(horizontal = 12.dp, vertical = 6.dp)
+                ) {
+                    Text(
+                        text = "Orientação ativa",
+                        color = Color(0xFF4CAF78),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                Button(
+                    onClick = onRegistrar,
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF6B9DFE))
+                ) {
+                    Text(
+                        text = "Registrar",
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
             }
         }
     }

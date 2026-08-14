@@ -132,6 +132,58 @@ data class ItemMedicacaoOcorrenciaResponse(
     val observacao: String?
 )
 
+data class OrientacoesFuncionaisPageResponse(
+    val content: List<OrientacaoFuncionalResponse>?
+)
+
+data class OrientacaoFuncionalResponse(
+    val id: Long?,
+    val responsavel: ProfissionalSaudeResumoResponse?,
+    val nome: String?,
+    val descricao: String?,
+    val finalidade: String?,
+    val urlImagem: String?,
+    val ativo: Boolean?,
+    val tags: List<TagFuncionalResponse>?,
+    val dataCriacao: String?,
+    val dataAtualizacao: String?
+)
+
+data class ProfissionalSaudeResumoResponse(
+    val id: Long?,
+    val nome: String?,
+    val email: String?
+)
+
+data class TagFuncionalResponse(
+    val id: Long?,
+    val nome: String?,
+    val descricao: String?
+)
+
+data class RegistroRealizacaoFuncionalRequest(
+    val id: Long,
+    val status: String,
+    val duracaoRealizadaMinutos: Int?,
+    val sensacaoFinal: String?,
+    val observacao: String?
+)
+
+data class RegistroRealizacaoFuncionalResponse(
+    val id: Long?,
+    val orientacaoFuncionalId: Long?,
+    val nomeOrientacao: String?,
+    val status: String?,
+    val duracaoRealizadaMinutos: Int?,
+    val sensacaoFinal: String?,
+    val observacao: String?,
+    val dataRegistro: String?
+)
+
+data class HistoricoRealizacaoFuncionalPageResponse(
+    val content: List<RegistroRealizacaoFuncionalResponse>?
+)
+
 interface AuthApi {
     @POST("auth/logar")
     suspend fun logar(@Body request: LoginRequest): LoginResponse
@@ -177,5 +229,30 @@ interface AuthApi {
         @Path("id") pacienteId: Long,
         @Body request: AtualizarAdesaoRequest
     )
-}
 
+    @GET("orientacoes-funcionais/paciente")
+    suspend fun getOrientacoesFuncionaisPaciente(
+        @Query("number-page") numberPage: Int = 0,
+        @Query("page-size") pageSize: Int = 50
+    ): OrientacoesFuncionaisPageResponse
+
+    @GET("paciente/{pacienteId}/realizacao-funcional/historico")
+    suspend fun getHistoricoRealizacaoFuncional(
+        @Path("pacienteId") pacienteId: Long,
+        @Query("number-page") numberPage: Int = 0,
+        @Query("page-size") pageSize: Int = 100
+    ): HistoricoRealizacaoFuncionalPageResponse
+
+    @POST("paciente/{pacienteId}/realizacao-funcional")
+    suspend fun registrarRealizacaoFuncional(
+        @Path("pacienteId") pacienteId: Long,
+        @Body request: RegistroRealizacaoFuncionalRequest
+    ): RegistroRealizacaoFuncionalResponse
+
+    @PUT("paciente/{pacienteId}/realizacao-funcional/{registroId}")
+    suspend fun alterarRealizacaoFuncional(
+        @Path("pacienteId") pacienteId: Long,
+        @Path("registroId") registroId: Long,
+        @Body request: RegistroRealizacaoFuncionalRequest
+    ): RegistroRealizacaoFuncionalResponse
+}

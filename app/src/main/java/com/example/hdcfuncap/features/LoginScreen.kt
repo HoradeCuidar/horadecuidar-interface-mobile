@@ -155,7 +155,12 @@ fun LoginScreen(
         ) {
             Checkbox(
                 checked = lembrarDeMim,
-                onCheckedChange = { lembrarDeMim = it }
+                onCheckedChange = { lembrarDeMim = it },
+                colors = CheckboxDefaults.colors(
+                    checkedColor = corBotao,
+                    uncheckedColor = corBotao,
+                    checkmarkColor = Color.White
+                )
             )
             Text(text = "Lembrar de mim", color = corTextoCinza, fontSize = 14.sp)
         }

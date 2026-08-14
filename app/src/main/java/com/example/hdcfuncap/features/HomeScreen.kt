@@ -13,7 +13,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.DirectionsWalk
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.outlined.Medication
@@ -197,28 +196,6 @@ fun HomeScreen(
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))
-            }
-
-            item {
-                Spacer(modifier = Modifier.height(16.dp))
-
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Outlined.DirectionsWalk,
-                        contentDescription = null,
-                        tint = Color(0xFF8DE39D),
-                        modifier = Modifier.size(20.dp)
-                    )
-
-                    Spacer(modifier = Modifier.width(8.dp))
-
-                    Text(
-                        text = "Exercícios",
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = corTextoPrincipal
-                    )
-                }
             }
         }
     }
