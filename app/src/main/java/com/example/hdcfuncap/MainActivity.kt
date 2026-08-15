@@ -26,6 +26,9 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.example.hdcfuncap.features.ConfiguracoesScreen
+import com.example.hdcfuncap.features.HistoricoScreen
+import com.example.hdcfuncap.features.HistoricoViewModel
+import com.example.hdcfuncap.features.HistoricoViewModelFactory
 import com.example.hdcfuncap.features.HomeScreen
 import com.example.hdcfuncap.features.HomeViewModel
 import com.example.hdcfuncap.features.HomeViewModelFactory
@@ -220,6 +223,18 @@ class MainActivity : ComponentActivity() {
                         onBack = {
                             navController.popBackStack("perfil", inclusive = false)
                         }
+                    )
+                }
+                composable("historico") {
+                    val context = LocalContext.current
+                    val authApi = remember { RetrofitClient.getAuthApi(context) }
+                    val historicoViewModel: HistoricoViewModel = viewModel(
+                        factory = HistoricoViewModelFactory(authApi)
+                    )
+
+                    HistoricoScreen(
+                        onNavigate = { rota -> navController.navigate(rota) },
+                        viewModel = historicoViewModel
                     )
                 }
                 composable("registrar") {

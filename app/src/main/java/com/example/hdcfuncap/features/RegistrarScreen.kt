@@ -37,7 +37,6 @@ fun RegistrarScreen(
     val context = LocalContext.current
     val userPreferences = remember { UserPreferences(context) }
     val pacienteId by userPreferences.pacienteId.collectAsState(initial = null)
-
     val medicamentos by viewModel.medicamentos.collectAsState()
     val exercicios by viewModel.exercicios.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
@@ -467,15 +466,34 @@ fun RegistroExercicioCard(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = if (isRealizado) "Realizado" else "Parcialmente realizado",
-                            fontSize = 14.sp,
-                            color = corStatus,
-                            fontWeight = FontWeight.Medium
-                        )
+                        Box(
+                            modifier = Modifier
+                                .background(
+                                    if (isRealizado) Color(0xFFE8F7ED) else Color(0xFFFFF2E0),
+                                    RoundedCornerShape(50)
+                                )
+                                .padding(horizontal = 12.dp, vertical = 7.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.Check,
+                                    contentDescription = null,
+                                    tint = corStatus,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(5.dp))
+                                Text(
+                                    text = if (isRealizado) "Realizado" else "Parcial",
+                                    fontSize = 14.sp,
+                                    color = corStatus,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
 
                         if (detalhesRegistro.isNotBlank()) {
-                            Spacer(modifier = Modifier.height(2.dp))
+                            Spacer(modifier = Modifier.height(6.dp))
                             Text(
                                 text = detalhesRegistro,
                                 fontSize = 12.sp,
@@ -484,20 +502,36 @@ fun RegistroExercicioCard(
                         }
                     }
 
-                    Text(
-                        text = if (isRealizado) "Marcar parcial" else "Marcar realizado",
-                        fontSize = 14.sp,
-                        color = Color.Gray,
-                        modifier = Modifier.clickable {
-                            onRegistrar(
-                                if (isRealizado) {
-                                    "PARCIALMENTE_REALIZADO"
-                                } else {
-                                    "REALIZADO"
-                                }
+                    Spacer(modifier = Modifier.width(12.dp))
+
+                    if (isRealizado) {
+                        OutlinedButton(
+                            onClick = { onRegistrar("PARCIALMENTE_REALIZADO") },
+                            modifier = Modifier.height(40.dp),
+                            shape = RoundedCornerShape(12.dp),
+                            contentPadding = PaddingValues(horizontal = 14.dp)
+                        ) {
+                            Text(
+                                text = "Marcar parcial",
+                                color = Color(0xFFE6A13A),
+                                fontWeight = FontWeight.Bold
                             )
                         }
-                    )
+                    } else {
+                        Button(
+                            onClick = { onRegistrar("REALIZADO") },
+                            modifier = Modifier.height(40.dp),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF8DE39D)),
+                            contentPadding = PaddingValues(horizontal = 14.dp)
+                        ) {
+                            Text(
+                                text = "Marcar realizado",
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
                 }
             } else {
                 Row(

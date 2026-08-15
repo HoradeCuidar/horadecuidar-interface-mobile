@@ -25,7 +25,6 @@ import androidx.compose.material.icons.automirrored.outlined.StickyNote2
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Email
-import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.MedicalInformation
@@ -163,14 +162,6 @@ fun PerfilScreen(
                         )
                         HorizontalDivider(color = Color(0xFFF0F2F5))
                         ProfileActionRow(
-                            icon = Icons.Outlined.History,
-                            iconTint = Color(0xFF6B7280),
-                            iconBackground = Color(0xFFF2F5FA),
-                            label = "Histórico",
-                            onClick = {}
-                        )
-                        HorizontalDivider(color = Color(0xFFF0F2F5))
-                        ProfileActionRow(
                             icon = Icons.Outlined.Lock,
                             iconTint = Color(0xFF6B7280),
                             iconBackground = Color(0xFFF2F5FA),
@@ -239,14 +230,14 @@ private fun ProfileHeaderCard(
                     onClick = onEditClick,
                     modifier = Modifier
                         .align(Alignment.TopEnd)
-                        .size(34.dp)
+                        .size(30.dp)
                         .background(Color(0xFF4E86F7), CircleShape)
                 ) {
                     Icon(
                         imageVector = Icons.Outlined.Edit,
                         contentDescription = "Editar perfil",
                         tint = Color.White,
-                        modifier = Modifier.size(18.dp)
+                        modifier = Modifier.size(20.dp)
                     )
                 }
             }
