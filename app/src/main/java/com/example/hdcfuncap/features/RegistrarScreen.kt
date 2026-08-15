@@ -12,6 +12,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.DirectionsWalk
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.outlined.Medication
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -86,11 +87,9 @@ fun RegistrarScreen(
                 item { CircularProgressIndicator(modifier = Modifier.fillMaxWidth().wrapContentWidth(Alignment.CenterHorizontally)) }
             } else {
                 item {
-                    Text(
-                        text = "Medicamentos",
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = corTextoPrincipal
+                    RegistroSectionHeader(
+                        title = "Prescrições de hoje",
+                        subtitle = "Medicamentos previstos para o seu tratamento"
                     )
                     Spacer(modifier = Modifier.height(12.dp))
                 }
@@ -123,12 +122,10 @@ fun RegistrarScreen(
                 }
 
                 item {
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = "Exercícios",
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = corTextoPrincipal
+                    Spacer(modifier = Modifier.height(8.dp))
+                    RegistroSectionHeader(
+                        title = "Recomendações de exercícios",
+                        subtitle = "Orientações funcionais para registrar quando realizar"
                     )
                     Spacer(modifier = Modifier.height(12.dp))
                 }
@@ -175,6 +172,28 @@ fun RegistrarScreen(
                 }
                 exercicioSelecionado = null
             }
+        )
+    }
+}
+
+@Composable
+private fun RegistroSectionHeader(
+    title: String,
+    subtitle: String
+) {
+    Column {
+        Text(
+            text = title,
+            fontSize = 18.sp,
+            fontWeight = FontWeight.Bold,
+            color = Color(0xFF1E293B)
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = subtitle,
+            fontSize = 13.sp,
+            color = Color(0xFF6B7280),
+            lineHeight = 18.sp
         )
     }
 }
@@ -519,6 +538,7 @@ fun RegistroMedicamentoCard(
     onRegistrar: (String) -> Unit
 ) {
     val isFeito = medicamento.statusAdesaoHoje == "REALIZADO"
+    val isNaoFeito = medicamento.statusAdesaoHoje == "NAO_REALIZADO"
 
     val corCardFundo = when {
         isFeito -> Color(0xFFE8F7ED)
@@ -527,6 +547,11 @@ fun RegistroMedicamentoCard(
     val corBorda = when {
         isFeito -> Color(0xFFBCE3C5)
         else -> Color(0xFFE2E8F0)
+    }
+    val statusDescricao = when {
+        isFeito -> "Registrado"
+        isNaoFeito -> "Não realizado"
+        else -> "Ainda não registrado"
     }
 
     Card(
@@ -559,38 +584,71 @@ fun RegistroMedicamentoCard(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            if (isFeito) {
+            if (isFeito || isNaoFeito) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Default.Check,
-                            contentDescription = null,
-                            tint = Color(0xFF8DE39D),
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = "Registrado",
-                            fontSize = 14.sp,
-                            color = Color(0xFF8DE39D),
-                            fontWeight = FontWeight.Medium
-                        )
+                    Box(
+                        modifier = Modifier
+                            .background(
+                                if (isFeito) Color(0xFFE8F7ED) else Color(0xFFF1F5F9),
+                                RoundedCornerShape(50)
+                            )
+                            .padding(horizontal = 12.dp, vertical = 7.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = if (isFeito) Icons.Default.Check else Icons.Default.Close,
+                                contentDescription = null,
+                                tint = if (isFeito) Color(0xFF8DE39D) else Color(0xFF94A3B8),
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(5.dp))
+                            Text(
+                                text = statusDescricao,
+                                fontSize = 14.sp,
+                                color = if (isFeito) Color(0xFF8DE39D) else Color(0xFF64748B),
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
                     }
-                    Text(
-                        text = "Corrigir",
-                        fontSize = 14.sp,
-                        color = Color.Gray,
-                        modifier = Modifier.clickable { onRegistrar("NAO_REALIZADO") }
-                    )
+
+                    if (isFeito) {
+                        OutlinedButton(
+                            onClick = { onRegistrar("NAO_REALIZADO") },
+                            modifier = Modifier.height(40.dp),
+                            shape = RoundedCornerShape(12.dp),
+                            contentPadding = PaddingValues(horizontal = 14.dp)
+                        ) {
+                            Text(
+                                text = "Desfazer",
+                                color = Color(0xFF64748B),
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    } else {
+                        Button(
+                            onClick = { onRegistrar("REALIZADO") },
+                            modifier = Modifier.height(40.dp),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF8DE39D)),
+                            contentPadding = PaddingValues(horizontal = 14.dp)
+                        ) {
+                            Text(
+                                text = "Marcar tomado",
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
                 }
             } else {
                 Column(modifier = Modifier.fillMaxWidth()) {
                     Text(
-                        text = "Ainda não registrado",
+                        text = statusDescricao,
                         fontSize = 14.sp,
                         color = Color.Gray,
                         fontWeight = FontWeight.Medium
@@ -598,15 +656,35 @@ fun RegistroMedicamentoCard(
 
                     Spacer(modifier = Modifier.height(12.dp))
 
-                    Button(
-                        onClick = { onRegistrar("REALIZADO") },
-                        modifier = Modifier.fillMaxWidth().height(48.dp),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF8DE39D))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        Icon(imageVector = Icons.Default.Check, contentDescription = null, tint = Color.White)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Tomei", color = Color.White, fontWeight = FontWeight.Bold)
+                        OutlinedButton(
+                            onClick = { onRegistrar("NAO_REALIZADO") },
+                            modifier = Modifier.weight(1f).height(48.dp),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = null,
+                                tint = Color(0xFFFF6B6B),
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Não tomei", color = Color(0xFFFF6B6B), fontWeight = FontWeight.Bold)
+                        }
+
+                        Button(
+                            onClick = { onRegistrar("REALIZADO") },
+                            modifier = Modifier.weight(1f).height(48.dp),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF8DE39D))
+                        ) {
+                            Icon(imageVector = Icons.Default.Check, contentDescription = null, tint = Color.White)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Tomei", color = Color.White, fontWeight = FontWeight.Bold)
+                        }
                     }
                 }
             }

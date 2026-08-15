@@ -112,6 +112,7 @@ data class MedicamentosDiaResponse(
 data class OcorrenciaMedicamentoResponse(
     val id: Long?,
     val prescricaoId: String?,
+    val status: String?,
     val itemMedicacao: ItemMedicacaoOcorrenciaResponse?,
     val dataPrevista: String?,
     val ordemNoDia: Int?,

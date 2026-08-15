@@ -24,7 +24,12 @@ fun MedicamentosDiaResponse.toMedicamentosHoje(): List<MedicamentoHojeResponse> 
         val itemId = item.id ?: return@mapNotNull null
         val ocorrenciaId = ocorrencia.id ?: return@mapNotNull null
         val quantidadeDoses = item.quantidadeDoses ?: 1
-        val foiRegistrado = ocorrencia.dataHoraRegistro != null
+        val status = ocorrencia.status ?: if (ocorrencia.dataHoraRegistro != null) {
+            "REALIZADO"
+        } else {
+            "PENDENTE"
+        }
+        val foiRealizado = status == "REALIZADO"
 
         MedicamentoHojeResponse(
             itemId = itemId,
@@ -34,10 +39,10 @@ fun MedicamentosDiaResponse.toMedicamentosHoje(): List<MedicamentoHojeResponse> 
             frequencia = formatarFrequencia(item),
             viaAdministracao = formatarViaAdministracao(item.viaAdministracao),
             observacao = ocorrencia.observacao ?: item.observacao,
-            statusAdesaoHoje = if (foiRegistrado) "REALIZADO" else null,
+            statusAdesaoHoje = status,
             adesaoId = ocorrenciaId,
             dosesEsperadasHoje = quantidadeDoses,
-            dosesRegistradasHoje = if (foiRegistrado) 1 else 0,
+            dosesRegistradasHoje = if (foiRealizado) 1 else 0,
             ocorrenciaId = ocorrenciaId,
             ordemNoDia = ocorrencia.ordemNoDia,
             dataPrevista = ocorrencia.dataPrevista,

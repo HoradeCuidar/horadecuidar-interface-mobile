@@ -177,7 +177,7 @@ private fun PrescricoesCategoriasContent(
             Spacer(modifier = Modifier.height(10.dp))
 
             Text(
-                text = "Prescrições ativas do seu tratamento",
+                text = "Acompanhe suas prescrições e recomendações",
                 fontSize = 13.sp,
                 color = Color(0xFF757575)
             )
@@ -198,6 +198,13 @@ private fun PrescricoesCategoriasContent(
             }
         } else {
             item {
+                SecaoPrescricoesTitulo(
+                    title = "Prescrições",
+                    subtitle = "Itens definidos para o seu tratamento"
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
                 CategoriaPrescricaoCard(
                     icon = Icons.Outlined.Medication,
                     iconTint = Color(0xFF6B9DFE),
@@ -218,6 +225,13 @@ private fun PrescricoesCategoriasContent(
                     subtitle = "Em breve",
                     enabled = false,
                     onClick = {}
+                )
+
+                Spacer(modifier = Modifier.height(22.dp))
+
+                SecaoPrescricoesTitulo(
+                    title = "Recomendações de exercícios",
+                    subtitle = "Orientações funcionais para sua rotina"
                 )
 
                 Spacer(modifier = Modifier.height(12.dp))
@@ -266,6 +280,27 @@ private fun PrescricoesCategoriasContent(
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun SecaoPrescricoesTitulo(
+    title: String,
+    subtitle: String
+) {
+    Column {
+        Text(
+            text = title,
+            color = Color(0xFF1E293B),
+            fontSize = 18.sp,
+            fontWeight = FontWeight.Bold
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = subtitle,
+            color = Color(0xFF6B7280),
+            fontSize = 13.sp
+        )
     }
 }
 
