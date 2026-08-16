@@ -22,8 +22,7 @@ import androidx.compose.ui.unit.sp
 import com.example.hdcfuncap.R
 import com.example.hdcfuncap.network.LoginRequest
 import com.example.hdcfuncap.network.RetrofitClient
-
- import com.example.hdcfuncap.storage.UserPreferences
+import com.example.hdcfuncap.storage.UserPreferences
 import kotlinx.coroutines.launch
 
 @Composable
@@ -175,12 +174,18 @@ fun LoginScreen(
         Button(
             enabled = !isLoading,
             onClick = {
+                val usuarioTratado = usuario.trim()
+                if (usuarioTratado.isBlank() || senha.isBlank()) {
+                    loginMessage = "Informe usuário e senha para entrar."
+                    return@Button
+                }
+
                 isLoading = true
                 loginMessage = null
 
                 coroutineScope.launch {
                     try {
-                        val request = LoginRequest(username = usuario, senha = senha)
+                        val request = LoginRequest(username = usuarioTratado, senha = senha)
                         val response = RetrofitClient.getAuthApi(context).logar(request)
                         val token = response.token
                         val pacienteId = response.id
@@ -191,8 +196,8 @@ fun LoginScreen(
                         }
 
                         userPreferences.saveToken(token)
-                        userPreferences.savePaciente(id = pacienteId, nome = usuario)
-                        userPreferences.saveUser(username = usuario, remember = lembrarDeMim)
+                        userPreferences.savePaciente(id = pacienteId, nome = usuarioTratado)
+                        userPreferences.saveUser(username = usuarioTratado, remember = lembrarDeMim)
 
                         onLoginSuccess()
                     } catch (e: Exception) {

@@ -64,17 +64,23 @@ class HistoricoViewModel(private val authApi: AuthApi) : ViewModel() {
                 val mesReferencia = mesSelecionado.clone() as Calendar
                 val diasDoMes = datasDoMes(mesReferencia)
                 val ocorrenciasPorData = mutableMapOf<String, List<OcorrenciaMedicamentoResponse>>()
+                var avisoParcial: String? = null
 
                 diasDoMes.forEach { data ->
                     val response = authApi.getMedicamentosHoje(pacienteId, data)
                     ocorrenciasPorData[data] = response.ocorrencias.orEmpty()
                 }
 
-                val registrosExercicios = carregarRegistrosExercicioDoMes(
-                    pacienteId = pacienteId,
-                    dataInicio = diasDoMes.firstOrNull().orEmpty(),
-                    dataFim = diasDoMes.lastOrNull().orEmpty()
-                )
+                val registrosExercicios = try {
+                    carregarRegistrosExercicioDoMes(
+                        pacienteId = pacienteId,
+                        dataInicio = diasDoMes.firstOrNull().orEmpty(),
+                        dataFim = diasDoMes.lastOrNull().orEmpty()
+                    )
+                } catch (e: Exception) {
+                    avisoParcial = "Não foi possível carregar os dados de exercícios."
+                    emptyList()
+                }
 
                 val datasRecentes = datasRecentes(mesReferencia, diasDoMes)
                 val registrosRecentes = montarRegistrosRecentes(
@@ -90,6 +96,7 @@ class HistoricoViewModel(private val authApi: AuthApi) : ViewModel() {
                     canCarregarMesAnterior = podeCarregarMesAnterior(mesReferencia),
                     canCarregarProximoMes = podeCarregarProximoMes(mesReferencia)
                 )
+                _errorMessage.value = avisoParcial
             } catch (e: Exception) {
                 _errorMessage.value = "Não foi possível carregar seu histórico."
                 _uiState.value = HistoricoUiState(
