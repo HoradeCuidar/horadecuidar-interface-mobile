@@ -43,13 +43,17 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.SubcomposeAsyncImage
 import com.example.hdcfuncap.components.HdcBottomBar
+import com.example.hdcfuncap.components.HdcPullToRefresh
 import com.example.hdcfuncap.network.ItemMedicacaoResponse
 import com.example.hdcfuncap.network.OrientacaoFuncionalResponse
 import com.example.hdcfuncap.network.PrescricaoMedicamentoResponse
@@ -114,7 +118,10 @@ fun PrescricoesScreen(
                     medicacoes = medicacoes,
                     isLoading = isLoading,
                     errorMessage = errorMessage,
-                    onBack = { telaAtual = TelaPrescricoes.CATEGORIAS }
+                    onBack = { telaAtual = TelaPrescricoes.CATEGORIAS },
+                    onRefresh = {
+                        pacienteId?.let { viewModel.carregarPrescricoesMedicamentos(it, forceRefresh = true) }
+                    }
                 )
             }
 
@@ -125,7 +132,8 @@ fun PrescricoesScreen(
                     isLoading = isLoadingOrientacoes,
                     errorMessage = errorMessageOrientacoes,
                     onBack = { telaAtual = TelaPrescricoes.CATEGORIAS },
-                    onRegistrar = { onNavigate("registrar") }
+                    onRegistrar = { onNavigate("registrar") },
+                    onRefresh = { viewModel.carregarOrientacoesFuncionais(forceRefresh = true) }
                 )
             }
 
@@ -140,7 +148,11 @@ fun PrescricoesScreen(
                         .joinToString("\n")
                         .ifBlank { null },
                     onOpenMedicamentos = { telaAtual = TelaPrescricoes.MEDICAMENTOS },
-                    onOpenExercicios = { telaAtual = TelaPrescricoes.EXERCICIOS }
+                    onOpenExercicios = { telaAtual = TelaPrescricoes.EXERCICIOS },
+                    onRefresh = {
+                        pacienteId?.let { viewModel.carregarPrescricoesMedicamentos(it, forceRefresh = true) }
+                        viewModel.carregarOrientacoesFuncionais(forceRefresh = true)
+                    }
                 )
             }
         }
@@ -156,128 +168,138 @@ private fun PrescricoesCategoriasContent(
     isLoading: Boolean,
     errorMessage: String?,
     onOpenMedicamentos: () -> Unit,
-    onOpenExercicios: () -> Unit
+    onOpenExercicios: () -> Unit,
+    onRefresh: () -> Unit
 ) {
-    LazyColumn(
+    val isInitialLoading = isLoading && totalMedicamentos == 0 && totalExercicios == 0
+
+    HdcPullToRefresh(
+        isRefreshing = isLoading,
+        onRefresh = onRefresh,
         modifier = Modifier
             .fillMaxSize()
             .background(Color(0xFFF8F9FA))
             .padding(innerPadding)
-            .padding(horizontal = 24.dp),
-        contentPadding = PaddingValues(top = 40.dp, bottom = 32.dp)
     ) {
-        item {
-            Text(
-                text = "Minhas Prescrições",
-                fontSize = 24.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color(0xFF1E293B)
-            )
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 24.dp),
+            contentPadding = PaddingValues(top = 40.dp, bottom = 32.dp)
+        ) {
+            item {
+                Text(
+                    text = "Minhas Prescrições",
+                    fontSize = 24.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF1E293B)
+                )
 
-            Spacer(modifier = Modifier.height(10.dp))
+                Spacer(modifier = Modifier.height(10.dp))
 
-            Text(
-                text = "Acompanhe suas prescrições e recomendações",
-                fontSize = 13.sp,
-                color = Color(0xFF757575)
-            )
+                Text(
+                    text = "Acompanhe suas prescrições e recomendações",
+                    fontSize = 13.sp,
+                    color = Color(0xFF757575)
+                )
 
-            Spacer(modifier = Modifier.height(18.dp))
-        }
+                Spacer(modifier = Modifier.height(18.dp))
+            }
 
-        if (isLoading) {
+            if (isInitialLoading) {
+                item {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(96.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator(color = Color(0xFF6B9DFE))
+                    }
+                }
+            } else {
+                item {
+                    SecaoPrescricoesTitulo(
+                        title = "Prescrições",
+                        subtitle = "Itens definidos para o seu tratamento"
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    CategoriaPrescricaoCard(
+                        icon = Icons.Outlined.Medication,
+                        iconTint = Color(0xFF6B9DFE),
+                        iconBackground = Color(0xFFEAF1FF),
+                        title = "Medicação",
+                        subtitle = "$totalMedicamentos medicamentos ativos",
+                        enabled = true,
+                        onClick = onOpenMedicamentos
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    CategoriaPrescricaoCard(
+                        icon = Icons.Outlined.Restaurant,
+                        iconTint = Color(0xFFF4A261),
+                        iconBackground = Color(0xFFFFF2E8),
+                        title = "Alimentação",
+                        subtitle = "Em breve",
+                        enabled = false,
+                        onClick = {}
+                    )
+
+                    Spacer(modifier = Modifier.height(22.dp))
+
+                    SecaoPrescricoesTitulo(
+                        title = "Recomendações de exercícios",
+                        subtitle = "Orientações funcionais para sua rotina"
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    CategoriaPrescricaoCard(
+                        icon = Icons.AutoMirrored.Outlined.DirectionsWalk,
+                        iconTint = Color(0xFF6FCF97),
+                        iconBackground = Color(0xFFEAF8F0),
+                        title = "Exercícios",
+                        subtitle = "$totalExercicios orientações ativas",
+                        enabled = true,
+                        onClick = onOpenExercicios
+                    )
+
+                    Spacer(modifier = Modifier.height(14.dp))
+                }
+            }
+
+            errorMessage?.let { message ->
+                item {
+                    Text(
+                        text = message,
+                        color = Color(0xFFC62828),
+                        fontSize = 13.sp,
+                        modifier = Modifier.padding(bottom = 12.dp)
+                    )
+                }
+            }
+
             item {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(96.dp),
-                    contentAlignment = Alignment.Center
+                        .background(Color(0xFFEAF1FF), RoundedCornerShape(12.dp))
+                        .padding(14.dp)
                 ) {
-                    CircularProgressIndicator(color = Color(0xFF6B9DFE))
+                    Text(
+                        text = if (nomeProfissional.isNullOrBlank()) {
+                            "Suas prescrições são atualizadas pelo seu médico. Em caso de dúvida, entre em contato."
+                        } else {
+                            "Suas prescrições são atualizadas por Dr. $nomeProfissional. Em caso de dúvida, entre em contato."
+                        },
+                        fontSize = 13.sp,
+                        color = Color(0xFF1E293B),
+                        lineHeight = 18.sp
+                    )
                 }
-            }
-        } else {
-            item {
-                SecaoPrescricoesTitulo(
-                    title = "Prescrições",
-                    subtitle = "Itens definidos para o seu tratamento"
-                )
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                CategoriaPrescricaoCard(
-                    icon = Icons.Outlined.Medication,
-                    iconTint = Color(0xFF6B9DFE),
-                    iconBackground = Color(0xFFEAF1FF),
-                    title = "Medicação",
-                    subtitle = "$totalMedicamentos medicamentos ativos",
-                    enabled = true,
-                    onClick = onOpenMedicamentos
-                )
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                CategoriaPrescricaoCard(
-                    icon = Icons.Outlined.Restaurant,
-                    iconTint = Color(0xFFF4A261),
-                    iconBackground = Color(0xFFFFF2E8),
-                    title = "Alimentação",
-                    subtitle = "Em breve",
-                    enabled = false,
-                    onClick = {}
-                )
-
-                Spacer(modifier = Modifier.height(22.dp))
-
-                SecaoPrescricoesTitulo(
-                    title = "Recomendações de exercícios",
-                    subtitle = "Orientações funcionais para sua rotina"
-                )
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                CategoriaPrescricaoCard(
-                    icon = Icons.AutoMirrored.Outlined.DirectionsWalk,
-                    iconTint = Color(0xFF6FCF97),
-                    iconBackground = Color(0xFFEAF8F0),
-                    title = "Exercícios",
-                    subtitle = "$totalExercicios orientações ativas",
-                    enabled = true,
-                    onClick = onOpenExercicios
-                )
-
-                Spacer(modifier = Modifier.height(14.dp))
-            }
-        }
-
-        errorMessage?.let { message ->
-            item {
-                Text(
-                    text = message,
-                    color = Color(0xFFC62828),
-                    fontSize = 13.sp,
-                    modifier = Modifier.padding(bottom = 12.dp)
-                )
-            }
-        }
-
-        item {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(Color(0xFFEAF1FF), RoundedCornerShape(12.dp))
-                    .padding(14.dp)
-            ) {
-                Text(
-                    text = if (nomeProfissional.isNullOrBlank()) {
-                        "Suas prescrições são atualizadas pelo seu médico. Em caso de dúvida, entre em contato."
-                    } else {
-                        "Suas prescrições são atualizadas por Dr. $nomeProfissional. Em caso de dúvida, entre em contato."
-                    },
-                    fontSize = 13.sp,
-                    color = Color(0xFF1E293B),
-                    lineHeight = 18.sp
-                )
             }
         }
     }
@@ -373,83 +395,103 @@ private fun MedicamentosPrescritosContent(
     medicacoes: List<MedicacaoComPrescricao>,
     isLoading: Boolean,
     errorMessage: String?,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onRefresh: () -> Unit
 ) {
-    LazyColumn(
+    val isInitialLoading = isLoading && medicacoes.isEmpty()
+
+    HdcPullToRefresh(
+        isRefreshing = isLoading,
+        onRefresh = onRefresh,
         modifier = Modifier
             .fillMaxSize()
             .background(Color(0xFFF8F9FA))
             .padding(innerPadding)
-            .padding(horizontal = 24.dp),
-        contentPadding = PaddingValues(top = 28.dp, bottom = 32.dp)
     ) {
-        item {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                IconButton(onClick = onBack) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "Voltar",
-                        tint = Color(0xFF1E293B)
-                    )
-                }
-
-                Column(
-                    modifier = Modifier.weight(1f),
-                    horizontalAlignment = Alignment.CenterHorizontally
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 24.dp),
+            contentPadding = PaddingValues(top = 28.dp, bottom = 32.dp)
+        ) {
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = "Medicação",
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFF1E293B)
-                    )
-                    Text(
-                        text = resumoPeriodo(medicacoes),
-                        fontSize = 12.sp,
-                        color = Color(0xFF6B7280)
-                    )
+                    IconButton(onClick = onBack) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Voltar",
+                            tint = Color(0xFF1E293B)
+                        )
+                    }
+
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = "Medicação",
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF1E293B)
+                        )
+                        Text(
+                            text = resumoPeriodo(medicacoes),
+                            fontSize = 12.sp,
+                            color = Color(0xFF6B7280)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.size(48.dp))
                 }
 
-                Spacer(modifier = Modifier.size(48.dp))
+                Spacer(modifier = Modifier.height(16.dp))
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
-        }
-
-        if (isLoading) {
-            item {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(120.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    CircularProgressIndicator(color = Color(0xFF6B9DFE))
+            if (isInitialLoading) {
+                item {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(120.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator(color = Color(0xFF6B9DFE))
+                    }
                 }
-            }
-        } else if (errorMessage != null) {
-            item {
-                Text(
-                    text = errorMessage,
-                    color = Color(0xFFC62828),
-                    fontSize = 14.sp
-                )
-            }
-        } else if (medicacoes.isEmpty()) {
-            item {
-                Text(
-                    text = "Você ainda não possui medicamentos prescritos.",
-                    color = Color(0xFF6B7280),
-                    fontSize = 14.sp
-                )
-            }
-        } else {
-            items(medicacoes) { medicacao ->
-                MedicacaoPrescritaCard(medicacao)
-                Spacer(modifier = Modifier.height(14.dp))
+            } else if (errorMessage != null && medicacoes.isEmpty()) {
+                item {
+                    Text(
+                        text = errorMessage,
+                        color = Color(0xFFC62828),
+                        fontSize = 14.sp
+                    )
+                }
+            } else if (medicacoes.isEmpty()) {
+                item {
+                    Text(
+                        text = "Você ainda não possui medicamentos prescritos.",
+                        color = Color(0xFF6B7280),
+                        fontSize = 14.sp
+                    )
+                }
+            } else {
+                errorMessage?.let { message ->
+                    item {
+                        Text(
+                            text = message,
+                            color = Color(0xFFC62828),
+                            fontSize = 13.sp,
+                            modifier = Modifier.padding(bottom = 12.dp)
+                        )
+                    }
+                }
+                items(medicacoes) { medicacao ->
+                    MedicacaoPrescritaCard(medicacao)
+                    Spacer(modifier = Modifier.height(14.dp))
+                }
             }
         }
     }
@@ -462,86 +504,106 @@ private fun ExerciciosPrescritosContent(
     isLoading: Boolean,
     errorMessage: String?,
     onBack: () -> Unit,
-    onRegistrar: () -> Unit
+    onRegistrar: () -> Unit,
+    onRefresh: () -> Unit
 ) {
-    LazyColumn(
+    val isInitialLoading = isLoading && orientacoes.isEmpty()
+
+    HdcPullToRefresh(
+        isRefreshing = isLoading,
+        onRefresh = onRefresh,
         modifier = Modifier
             .fillMaxSize()
             .background(Color(0xFFF8F9FA))
             .padding(innerPadding)
-            .padding(horizontal = 24.dp),
-        contentPadding = PaddingValues(top = 28.dp, bottom = 32.dp)
     ) {
-        item {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                IconButton(onClick = onBack) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "Voltar",
-                        tint = Color(0xFF1E293B)
-                    )
-                }
-
-                Column(
-                    modifier = Modifier.weight(1f),
-                    horizontalAlignment = Alignment.CenterHorizontally
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 24.dp),
+            contentPadding = PaddingValues(top = 28.dp, bottom = 32.dp)
+        ) {
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = "Exercícios",
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFF1E293B)
-                    )
-                    Text(
-                        text = "${orientacoes.size} orientações ativas",
-                        fontSize = 12.sp,
-                        color = Color(0xFF6B7280)
-                    )
+                    IconButton(onClick = onBack) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Voltar",
+                            tint = Color(0xFF1E293B)
+                        )
+                    }
+
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = "Exercícios",
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF1E293B)
+                        )
+                        Text(
+                            text = "${orientacoes.size} orientações ativas",
+                            fontSize = 12.sp,
+                            color = Color(0xFF6B7280)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.size(48.dp))
                 }
 
-                Spacer(modifier = Modifier.size(48.dp))
+                Spacer(modifier = Modifier.height(16.dp))
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
-        }
-
-        if (isLoading) {
-            item {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(120.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    CircularProgressIndicator(color = Color(0xFF6B9DFE))
+            if (isInitialLoading) {
+                item {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(120.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator(color = Color(0xFF6B9DFE))
+                    }
                 }
-            }
-        } else if (errorMessage != null) {
-            item {
-                Text(
-                    text = errorMessage,
-                    color = Color(0xFFC62828),
-                    fontSize = 14.sp
-                )
-            }
-        } else if (orientacoes.isEmpty()) {
-            item {
-                Text(
-                    text = "Você ainda não possui orientações de exercícios.",
-                    color = Color(0xFF6B7280),
-                    fontSize = 14.sp
-                )
-            }
-        } else {
-            items(orientacoes) { orientacao ->
-                ExercicioOrientacaoCard(
-                    orientacao = orientacao,
-                    onRegistrar = onRegistrar
-                )
-                Spacer(modifier = Modifier.height(14.dp))
+            } else if (errorMessage != null && orientacoes.isEmpty()) {
+                item {
+                    Text(
+                        text = errorMessage,
+                        color = Color(0xFFC62828),
+                        fontSize = 14.sp
+                    )
+                }
+            } else if (orientacoes.isEmpty()) {
+                item {
+                    Text(
+                        text = "Você ainda não possui orientações de exercícios.",
+                        color = Color(0xFF6B7280),
+                        fontSize = 14.sp
+                    )
+                }
+            } else {
+                errorMessage?.let { message ->
+                    item {
+                        Text(
+                            text = message,
+                            color = Color(0xFFC62828),
+                            fontSize = 13.sp,
+                            modifier = Modifier.padding(bottom = 12.dp)
+                        )
+                    }
+                }
+                items(orientacoes) { orientacao ->
+                    ExercicioOrientacaoCard(
+                        orientacao = orientacao,
+                        onRegistrar = onRegistrar
+                    )
+                    Spacer(modifier = Modifier.height(14.dp))
+                }
             }
         }
     }
@@ -559,25 +621,37 @@ private fun ExercicioOrientacaoCard(
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Text(
-                text = orientacao.nome.orEmpty().ifBlank { "Exercício" },
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color(0xFF1E293B)
-            )
-
-            val descricao = orientacao.descricao.orEmpty()
-            if (descricao.isNotBlank()) {
-                Spacer(modifier = Modifier.height(10.dp))
-                Text(
-                    text = descricao,
-                    fontSize = 14.sp,
-                    color = Color(0xFF4B5563),
-                    lineHeight = 19.sp
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                ExercicioImagem(
+                    urlImagem = orientacao.urlImagem,
+                    modifier = Modifier.size(58.dp)
                 )
+
+                Spacer(modifier = Modifier.width(14.dp))
+
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = orientacao.nome.orEmpty().ifBlank { "Exercício" },
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF1E293B)
+                    )
+
+                    val descricao = orientacao.descricao.orEmpty().trim()
+                    if (descricao.isNotBlank()) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = descricao,
+                            fontSize = 14.sp,
+                            color = Color(0xFF4B5563),
+                            lineHeight = 19.sp,
+                            maxLines = 3
+                        )
+                    }
+                }
             }
 
-            val finalidade = orientacao.finalidade.orEmpty()
+            val finalidade = orientacao.finalidade.orEmpty().trim()
             if (finalidade.isNotBlank()) {
                 Spacer(modifier = Modifier.height(12.dp))
                 InfoMedicamentoRow(
@@ -586,18 +660,11 @@ private fun ExercicioOrientacaoCard(
                 )
             }
 
-            val tags = orientacao.tags.orEmpty()
-                .mapNotNull { it.nome }
-                .filter { it.isNotBlank() }
+            val tags = orientacao.tagsNomes()
 
             if (tags.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(12.dp))
-                Text(
-                    text = tags.joinToString(" • "),
-                    color = Color(0xFF6B7280),
-                    fontSize = 12.sp,
-                    lineHeight = 17.sp
-                )
+                TagsTexto(tags = tags)
             }
 
             Spacer(modifier = Modifier.height(14.dp))
@@ -634,6 +701,61 @@ private fun ExercicioOrientacaoCard(
             }
         }
     }
+}
+
+@Composable
+private fun ExercicioImagem(
+    urlImagem: String?,
+    modifier: Modifier = Modifier
+) {
+    val imagem = urlImagem.normalizarUrlImagem()
+
+    if (imagem == null) {
+        ExercicioImagemFallback(modifier = modifier)
+        return
+    }
+
+    SubcomposeAsyncImage(
+        model = imagem,
+        contentDescription = null,
+        contentScale = ContentScale.Crop,
+        modifier = modifier
+            .clip(RoundedCornerShape(12.dp))
+            .background(Color(0xFFEAF8F0)),
+        loading = {
+            ExercicioImagemFallback(modifier = Modifier.fillMaxSize())
+        },
+        error = {
+            ExercicioImagemFallback(modifier = Modifier.fillMaxSize())
+        }
+    )
+}
+
+@Composable
+private fun ExercicioImagemFallback(modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(12.dp))
+            .background(Color(0xFFEAF8F0)),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            imageVector = Icons.AutoMirrored.Outlined.DirectionsWalk,
+            contentDescription = null,
+            tint = Color(0xFF57C47A),
+            modifier = Modifier.size(26.dp)
+        )
+    }
+}
+
+@Composable
+private fun TagsTexto(tags: List<String>) {
+    Text(
+        text = tags.joinToString(" • "),
+        color = Color(0xFF6B7280),
+        fontSize = 12.sp,
+        lineHeight = 17.sp
+    )
 }
 
 @Composable
@@ -731,7 +853,7 @@ private fun InfoMedicamentoRow(
 }
 
 private fun PrescricaoMedicamentoResponse.itensPrescricao(): List<ItemMedicacaoResponse> {
-    return itens ?: medicacoes ?: emptyList()
+    return (itens ?: medicacoes ?: emptyList()).filter { item -> item.ativo != false }
 }
 
 private fun formatarDosagemItem(item: ItemMedicacaoResponse): String {
@@ -745,17 +867,18 @@ private fun formatarFrequenciaItem(item: ItemMedicacaoResponse): String {
     val intervalo = item.intervaloValor ?: 1
     val tipo = item.intervaloTipo ?: return ""
     val vez = if (doses == 1) "vez" else "vezes"
+    val tipoNormalizado = tipo.trim().uppercase(Locale.US)
 
-    val unidadeTempo = when (tipo.uppercase()) {
+    val unidadeTempo = when (tipoNormalizado) {
         "HORA" -> if (intervalo == 1) "hora" else "horas"
         "DIA" -> if (intervalo == 1) "dia" else "dias"
         "SEMANA" -> if (intervalo == 1) "semana" else "semanas"
         "MES" -> if (intervalo == 1) "mês" else "meses"
-        else -> tipo.lowercase()
+        else -> tipo.trim().lowercase()
     }
 
-    return if (intervalo == 1 && tipo.uppercase() != "HORA") {
-        val preposicao = if (tipo.uppercase() == "DIA") "ao" else "por"
+    return if (intervalo == 1 && tipoNormalizado != "HORA") {
+        val preposicao = if (tipoNormalizado == "DIA") "ao" else "por"
         "$doses $vez $preposicao $unidadeTempo"
     } else {
         "$doses $vez a cada $intervalo $unidadeTempo"
@@ -763,14 +886,14 @@ private fun formatarFrequenciaItem(item: ItemMedicacaoResponse): String {
 }
 
 private fun formatarViaItem(via: String?): String? {
-    return when (via) {
+    return when (via?.trim()?.uppercase(Locale.US)) {
         null -> null
         "ORAL" -> "Via oral"
         "SUBLINGUAL" -> "Via sublingual"
         "INJETAVEL" -> "Via injetável"
         "TOPICA" -> "Via tópica"
         "INALATORIA" -> "Via inalatória"
-        else -> via
+        else -> via.trim()
     }
 }
 
@@ -811,5 +934,22 @@ private fun formatarData(valor: String?): String {
         "${partes[2]}/${partes[1]}/${partes[0]}"
     } else {
         data
+    }
+}
+
+private fun OrientacaoFuncionalResponse.tagsNomes(): List<String> {
+    return tags
+        .orEmpty()
+        .mapNotNull { tag -> tag.nome?.trim()?.takeIf { it.isNotBlank() } }
+        .distinct()
+}
+
+private fun String?.normalizarUrlImagem(): String? {
+    val url = orEmpty().trim()
+    if (url.isBlank()) return null
+
+    return url.takeIf {
+        it.startsWith("https://", ignoreCase = true) ||
+            it.startsWith("http://", ignoreCase = true)
     }
 }

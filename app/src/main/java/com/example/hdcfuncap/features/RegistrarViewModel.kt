@@ -1,5 +1,6 @@
 package com.example.hdcfuncap.features
 
+import android.os.SystemClock
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -9,6 +10,9 @@ import com.example.hdcfuncap.network.MedicamentoHojeResponse
 import com.example.hdcfuncap.network.OrientacaoFuncionalResponse
 import com.example.hdcfuncap.network.RegistroRealizacaoFuncionalRequest
 import com.example.hdcfuncap.network.RegistroRealizacaoFuncionalResponse
+import com.example.hdcfuncap.network.apenasDasPrescricoes
+import com.example.hdcfuncap.network.apenasPrescricoesMedicamentosAtivas
+import com.example.hdcfuncap.network.toMedicamentosHojeFallback
 import com.example.hdcfuncap.network.toMedicamentosHoje
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -22,8 +26,10 @@ data class ExercicioRegistroUi(
     val orientacao: OrientacaoFuncionalResponse,
     val registroHoje: RegistroRealizacaoFuncionalResponse?
 )
-
 class RegistrarViewModel(private val authApi: AuthApi) : ViewModel() {
+    private companion object {
+        const val AUTO_REFRESH_INTERVAL_MS = 45_000L
+    }
 
     private val _medicamentos = MutableStateFlow<List<MedicamentoHojeResponse>>(emptyList())
     val medicamentos: StateFlow<List<MedicamentoHojeResponse>> = _medicamentos.asStateFlow()
@@ -37,27 +43,55 @@ class RegistrarViewModel(private val authApi: AuthApi) : ViewModel() {
     private val _errorMessage = MutableStateFlow<String?>(null)
     val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
 
-    fun carregarDados(pacienteId: Long) {
+    private var lastLoadedAtMillis = 0L
+    private var lastPacienteId: Long? = null
+
+    fun carregarDados(pacienteId: Long, forceRefresh: Boolean = false) {
+        if (_isLoading.value) return
+        if (!forceRefresh && isCacheFresh(pacienteId)) return
+
         viewModelScope.launch {
             _isLoading.value = true
             _errorMessage.value = null
             val erros = mutableListOf<String>()
+            val hasCachedData = lastLoadedAtMillis > 0L
             try {
-                _medicamentos.value = authApi
-                    .getMedicamentosHoje(pacienteId, dataAtualIso())
-                    .toMedicamentosHoje()
+                val hoje = dataAtualIso()
+                val prescricoesAtivas = authApi
+                    .getPrescricoesMedicamentos(pacienteId)
+                    .apenasPrescricoesMedicamentosAtivas(hoje)
+                val medicamentosHoje = try {
+                    authApi
+                        .getMedicamentosHoje(pacienteId, hoje)
+                        .toMedicamentosHoje()
+                        .apenasDasPrescricoes(prescricoesAtivas)
+                } catch (e: Exception) {
+                    emptyList()
+                }
+
+                _medicamentos.value = medicamentosHoje.ifEmpty {
+                    prescricoesAtivas.toMedicamentosHojeFallback(hoje)
+                }
             } catch (e: Exception) {
                 erros.add("Não foi possível carregar os medicamentos de hoje.")
-                _medicamentos.value = emptyList()
+                if (!hasCachedData) {
+                    _medicamentos.value = emptyList()
+                }
             }
 
             try {
                 _exercicios.value = carregarExerciciosDoDia(pacienteId)
             } catch (e: Exception) {
                 erros.add("Não foi possível carregar os exercícios de hoje.")
-                _exercicios.value = emptyList()
+                if (!hasCachedData) {
+                    _exercicios.value = emptyList()
+                }
             }
 
+            if (erros.isEmpty()) {
+                lastPacienteId = pacienteId
+                lastLoadedAtMillis = SystemClock.elapsedRealtime()
+            }
             _errorMessage.value = erros.joinToString("\n").ifBlank { null }
             _isLoading.value = false
         }
@@ -75,7 +109,7 @@ class RegistrarViewModel(private val authApi: AuthApi) : ViewModel() {
             .getHistoricoRealizacaoFuncional(pacienteId = pacienteId)
             .content
             .orEmpty()
-            .filter { it.dataRegistro?.substringBefore("T") == hoje }
+            .filter { it.dataRegistro?.trim()?.substringBefore("T")?.substringBefore(" ") == hoje }
             .groupBy { it.orientacaoFuncionalId }
             .mapValues { (_, registros) -> registros.firstOrNull() }
 
@@ -101,7 +135,7 @@ class RegistrarViewModel(private val authApi: AuthApi) : ViewModel() {
                 val orientacaoId = exercicio.orientacao.id ?: return@launch
                 val request = RegistroRealizacaoFuncionalRequest(
                     id = orientacaoId,
-                    status = status,
+                    status = status.normalizedApiValue(),
                     duracaoRealizadaMinutos = duracaoRealizadaMinutos,
                     sensacaoFinal = sensacaoFinal,
                     observacao = observacao
@@ -121,7 +155,7 @@ class RegistrarViewModel(private val authApi: AuthApi) : ViewModel() {
                     )
                 }
 
-                carregarDados(pacienteId)
+                carregarDados(pacienteId, forceRefresh = true)
             } catch (e: Exception) {
                 _errorMessage.value = "Não foi possível salvar este exercício."
             }
@@ -132,14 +166,20 @@ class RegistrarViewModel(private val authApi: AuthApi) : ViewModel() {
         viewModelScope.launch {
             _errorMessage.value = null
             try {
-                val ocorrenciaId = medicamento.ocorrenciaId ?: return@launch
+                val ocorrenciaId = medicamento.ocorrenciaId
+                if (ocorrenciaId == null) {
+                    _errorMessage.value =
+                        "Este medicamento ainda não possui ocorrência gerada para hoje. Tente novamente mais tarde."
+                    return@launch
+                }
+
                 val request = AtualizarAdesaoRequest(
                     ocorrenciaId = ocorrenciaId,
                     itemMedicacaoId = medicamento.itemId,
                     ordemNoDia = medicamento.ordemNoDia,
                     dataPrevista = medicamento.dataPrevista,
                     quantidadeDiaria = medicamento.quantidadeDiaria,
-                    status = status,
+                    status = status.normalizedApiValue(),
                     observacao = medicamento.observacao ?: ""
                 )
 
@@ -153,16 +193,26 @@ class RegistrarViewModel(private val authApi: AuthApi) : ViewModel() {
                     authApi.criarAdesao(pacienteId = pacienteId, request = request)
                 }
 
-                carregarDados(pacienteId)
+                carregarDados(pacienteId, forceRefresh = true)
             } catch (e: Exception) {
                 _errorMessage.value = "Não foi possível salvar este registro."
             }
         }
     }
 
+    private fun isCacheFresh(pacienteId: Long): Boolean {
+        return lastPacienteId == pacienteId &&
+            lastLoadedAtMillis > 0L &&
+            SystemClock.elapsedRealtime() - lastLoadedAtMillis < AUTO_REFRESH_INTERVAL_MS
+    }
+
     private fun dataAtualIso(): String {
         return SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
     }
+}
+
+private fun String.normalizedApiValue(): String {
+    return trim().uppercase(Locale.US)
 }
 
 class RegistrarViewModelFactory(private val authApi: AuthApi) : ViewModelProvider.Factory {

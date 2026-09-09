@@ -4,7 +4,9 @@ import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.*
 import androidx.datastore.preferences.preferencesDataStore
+import java.io.IOException
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.map
 
@@ -21,27 +23,35 @@ class UserPreferences(private val context: Context) {
         val PACIENTE_NOME_KEY = stringPreferencesKey("paciente_nome")
         val FONT_SIZE_KEY = stringPreferencesKey("font_size")
     }
-    val pacienteId: Flow<Long?> = context.dataStore.data.map { preferences ->
+    private val safeData = context.dataStore.data.catch { exception ->
+        if (exception is IOException) {
+            emit(emptyPreferences())
+        } else {
+            throw exception
+        }
+    }
+
+    val pacienteId: Flow<Long?> = safeData.map { preferences ->
         preferences[PACIENTE_ID_KEY]
     }
 
-    val pacienteNome: Flow<String> = context.dataStore.data.map { preferences ->
+    val pacienteNome: Flow<String> = safeData.map { preferences ->
         preferences[PACIENTE_NOME_KEY] ?: ""
     }
 
-    val token: Flow<String?> = context.dataStore.data.map { preferences ->
+    val token: Flow<String?> = safeData.map { preferences ->
         preferences[TOKEN_KEY]
     }
 
-    val savedUsername: Flow<String> = context.dataStore.data.map { preferences ->
+    val savedUsername: Flow<String> = safeData.map { preferences ->
         preferences[USERNAME_KEY] ?: ""
     }
 
-    val isRememberMeChecked: Flow<Boolean> = context.dataStore.data.map { preferences ->
+    val isRememberMeChecked: Flow<Boolean> = safeData.map { preferences ->
         preferences[REMEMBER_ME_KEY] ?: false
     }
 
-    val fontSize: Flow<String> = context.dataStore.data.map { preferences ->
+    val fontSize: Flow<String> = safeData.map { preferences ->
         preferences[FONT_SIZE_KEY] ?: "media"
     }
 

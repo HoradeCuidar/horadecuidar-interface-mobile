@@ -1,10 +1,15 @@
 package com.example.hdcfuncap
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import android.util.Base64
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.CircularProgressIndicator
@@ -24,6 +29,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.hdcfuncap.features.LoginScreen
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.example.hdcfuncap.features.ConfiguracoesScreen
 import com.example.hdcfuncap.features.HistoricoScreen
@@ -45,10 +51,15 @@ import com.example.hdcfuncap.features.RegistrarScreen
 import com.example.hdcfuncap.features.RegistrarViewModel
 import com.example.hdcfuncap.features.RegistrarViewModelFactory
 import com.example.hdcfuncap.network.RetrofitClient
+import com.example.hdcfuncap.notifications.MedicationNotificationScheduler
 import com.example.hdcfuncap.storage.UserPreferences
+import androidx.core.content.ContextCompat
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -63,6 +74,28 @@ class MainActivity : ComponentActivity() {
             val isHandlingExpiredSession = remember { AtomicBoolean(false) }
             var sessionChecked by remember { mutableStateOf(false) }
             var startDestination by remember { mutableStateOf("login") }
+            var notificationSetupRequested by remember { mutableStateOf(false) }
+            val notificationPermissionLauncher = rememberLauncherForActivityResult(
+                contract = ActivityResultContracts.RequestPermission(),
+                onResult = {}
+            )
+            val requestNotificationPermission = {
+                if (
+                    Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                    ContextCompat.checkSelfPermission(
+                        context,
+                        Manifest.permission.POST_NOTIFICATIONS
+                    ) != PackageManager.PERMISSION_GRANTED
+                ) {
+                    try {
+                        notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                    } catch (_: Exception) {
+                        // A tela não deve ser afetada caso o launcher ainda não esteja pronto.
+                    }
+                }
+            }
+            val currentBackStackEntry by navController.currentBackStackEntryAsState()
+            val currentRoute = currentBackStackEntry?.destination?.route
             val selectedFontSize by userPreferences.fontSize.collectAsState(initial = "media")
             val currentDensity = LocalDensity.current
             val fontScale = when (selectedFontSize) {
@@ -87,12 +120,40 @@ class MainActivity : ComponentActivity() {
                     if (isHandlingExpiredSession.compareAndSet(false, true)) {
                         runOnUiThread {
                             CoroutineScope(Dispatchers.Main).launch {
+                                notificationSetupRequested = false
                                 userPreferences.clearSession()
                                 navController.navigate("login") {
                                     popUpTo("home") { inclusive = true }
                                     launchSingleTop = true
                                 }
                             }
+                        }
+                    }
+                }
+            }
+
+            LaunchedEffect(sessionChecked, currentRoute) {
+                if (
+                    sessionChecked &&
+                    currentRoute == "home" &&
+                    !notificationSetupRequested
+                ) {
+                    notificationSetupRequested = true
+                    delay(700)
+                    requestNotificationPermission()
+
+                    val pacienteId = userPreferences.pacienteId.firstOrNull()
+                    if (pacienteId != null) {
+                        try {
+                            withContext(Dispatchers.IO) {
+                                MedicationNotificationScheduler.refreshMedicationNotifications(
+                                    context = context.applicationContext,
+                                    authApi = RetrofitClient.getAuthApi(context),
+                                    pacienteId = pacienteId
+                                )
+                            }
+                        } catch (_: Exception) {
+                            // O app continua aberto mesmo se os lembretes não puderem ser atualizados.
                         }
                     }
                 }
@@ -119,6 +180,7 @@ class MainActivity : ComponentActivity() {
                     LoginScreen(
                         onLoginSuccess = {
                             isHandlingExpiredSession.set(false)
+                            notificationSetupRequested = false
                             navController.navigate("home") {
                                 popUpTo("login") { inclusive = true }
                             }
@@ -130,8 +192,12 @@ class MainActivity : ComponentActivity() {
                 }
                 composable("recuperar-senha") {
                     RecuperarSenhaScreen(
-                        onBackToLogin = {
-                            navController.popBackStack("login", inclusive = false)
+                        onBack = {
+                            if (!navController.popBackStack()) {
+                                navController.navigate("login") {
+                                    launchSingleTop = true
+                                }
+                            }
                         }
                     )
                 }
@@ -170,8 +236,10 @@ class MainActivity : ComponentActivity() {
                         onOpenDetails = { navController.navigate("perfil-detalhes") },
                         onOpenEdit = { navController.navigate("perfil-editar") },
                         onOpenSettings = { navController.navigate("configuracoes") },
+                        onOpenChangePassword = { navController.navigate("recuperar-senha") },
                         onLogout = {
                             isHandlingExpiredSession.set(false)
+                            notificationSetupRequested = false
                             CoroutineScope(Dispatchers.Main).launch {
                                 userPreferences.clearSession()
                                 navController.navigate("login") {

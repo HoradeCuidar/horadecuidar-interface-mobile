@@ -1,5 +1,6 @@
 package com.example.hdcfuncap.features
 
+import android.os.SystemClock
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -40,6 +41,7 @@ class HistoricoViewModel(private val authApi: AuthApi) : ViewModel() {
     private companion object {
         const val EXERCICIOS_PAGE_SIZE = 100
         const val MAX_EXERCICIOS_PAGES = 4
+        const val AUTO_REFRESH_INTERVAL_MS = 5 * 60_000L
     }
 
     private val mesSelecionado = Calendar.getInstance().apply {
@@ -55,10 +57,19 @@ class HistoricoViewModel(private val authApi: AuthApi) : ViewModel() {
     private val _errorMessage = MutableStateFlow<String?>(null)
     val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
 
-    fun carregarHistorico(pacienteId: Long) {
+    private var lastLoadedAtMillis = 0L
+    private var lastCacheKey: String? = null
+
+    fun carregarHistorico(pacienteId: Long, forceRefresh: Boolean = false) {
+        if (_isLoading.value) return
+
+        val cacheKey = historicoCacheKey(pacienteId, mesSelecionado)
+        if (!forceRefresh && isCacheFresh(cacheKey)) return
+
         viewModelScope.launch {
             _isLoading.value = true
             _errorMessage.value = null
+            val hasSameMonthCache = lastCacheKey == cacheKey && lastLoadedAtMillis > 0L
 
             try {
                 val mesReferencia = mesSelecionado.clone() as Calendar
@@ -67,8 +78,13 @@ class HistoricoViewModel(private val authApi: AuthApi) : ViewModel() {
                 var avisoParcial: String? = null
 
                 diasDoMes.forEach { data ->
-                    val response = authApi.getMedicamentosHoje(pacienteId, data)
-                    ocorrenciasPorData[data] = response.ocorrencias.orEmpty()
+                    try {
+                        val response = authApi.getMedicamentosHoje(pacienteId, data)
+                        ocorrenciasPorData[data] = response.ocorrencias.orEmpty()
+                    } catch (e: Exception) {
+                        ocorrenciasPorData[data] = emptyList()
+                        avisoParcial = "Alguns dias do histórico de medicamentos não puderam ser carregados."
+                    }
                 }
 
                 val registrosExercicios = try {
@@ -97,13 +113,17 @@ class HistoricoViewModel(private val authApi: AuthApi) : ViewModel() {
                     canCarregarProximoMes = podeCarregarProximoMes(mesReferencia)
                 )
                 _errorMessage.value = avisoParcial
+                lastCacheKey = cacheKey
+                lastLoadedAtMillis = SystemClock.elapsedRealtime()
             } catch (e: Exception) {
                 _errorMessage.value = "Não foi possível carregar seu histórico."
-                _uiState.value = HistoricoUiState(
-                    mesAno = mesAno(mesSelecionado),
-                    canCarregarMesAnterior = podeCarregarMesAnterior(mesSelecionado),
-                    canCarregarProximoMes = podeCarregarProximoMes(mesSelecionado)
-                )
+                if (!hasSameMonthCache) {
+                    _uiState.value = HistoricoUiState(
+                        mesAno = mesAno(mesSelecionado),
+                        canCarregarMesAnterior = podeCarregarMesAnterior(mesSelecionado),
+                        canCarregarProximoMes = podeCarregarProximoMes(mesSelecionado)
+                    )
+                }
             } finally {
                 _isLoading.value = false
             }
@@ -113,13 +133,23 @@ class HistoricoViewModel(private val authApi: AuthApi) : ViewModel() {
     fun carregarMesAnterior(pacienteId: Long) {
         if (!podeCarregarMesAnterior(mesSelecionado)) return
         mesSelecionado.add(Calendar.MONTH, -1)
-        carregarHistorico(pacienteId)
+        carregarHistorico(pacienteId, forceRefresh = true)
     }
 
     fun carregarProximoMes(pacienteId: Long) {
         if (!podeCarregarProximoMes(mesSelecionado)) return
         mesSelecionado.add(Calendar.MONTH, 1)
-        carregarHistorico(pacienteId)
+        carregarHistorico(pacienteId, forceRefresh = true)
+    }
+
+    private fun isCacheFresh(cacheKey: String): Boolean {
+        return lastCacheKey == cacheKey &&
+            lastLoadedAtMillis > 0L &&
+            SystemClock.elapsedRealtime() - lastLoadedAtMillis < AUTO_REFRESH_INTERVAL_MS
+    }
+
+    private fun historicoCacheKey(pacienteId: Long, mesReferencia: Calendar): String {
+        return "$pacienteId-${mesReferencia.get(Calendar.YEAR)}-${mesReferencia.get(Calendar.MONTH)}"
     }
 
     private fun podeCarregarMesAnterior(mesReferencia: Calendar): Boolean {
@@ -145,8 +175,8 @@ class HistoricoViewModel(private val authApi: AuthApi) : ViewModel() {
             .mapIndexed { index, datas ->
                 val datasDoPeriodo = datas.toSet()
                 val ocorrencias = datas.flatMap { data -> ocorrenciasPorData[data].orEmpty() }
-                val esperados = ocorrencias.count { it.status != "CANCELADO" }
-                val realizados = ocorrencias.count { it.status == "REALIZADO" }
+                val esperados = ocorrencias.count { it.status.normalizedApiValue() != "CANCELADO" }
+                val realizados = ocorrencias.count { it.status.normalizedApiValue() == "REALIZADO" }
                 val percentualMedicamentos = if (esperados > 0) {
                     ((realizados.toFloat() / esperados.toFloat()) * 100).toInt()
                 } else {
@@ -205,7 +235,7 @@ class HistoricoViewModel(private val authApi: AuthApi) : ViewModel() {
         if (registros.isEmpty()) return 0
 
         val pontuacao = registros.sumOf { registro ->
-            when (registro.status) {
+            when (registro.status.normalizedApiValue()) {
                 "REALIZADO" -> 1.0
                 "PARCIALMENTE_REALIZADO" -> 0.5
                 else -> 0.0
@@ -222,7 +252,10 @@ class HistoricoViewModel(private val authApi: AuthApi) : ViewModel() {
     ): List<HistoricoRegistroUi> {
         return datasRecentes.flatMap { data ->
             val medicamentos = ocorrenciasPorData[data].orEmpty()
-                .filter { it.status == "REALIZADO" || it.status == "NAO_REALIZADO" }
+                .filter {
+                    val status = it.status.normalizedApiValue()
+                    status == "REALIZADO" || status == "NAO_REALIZADO"
+                }
                 .mapNotNull { ocorrencia ->
                     val nome = ocorrencia.itemMedicacao?.nomeMedicamento
                         .orEmpty()
@@ -231,7 +264,7 @@ class HistoricoViewModel(private val authApi: AuthApi) : ViewModel() {
                     HistoricoRegistroUi(
                         data = formatarDiaMes(data),
                         nome = nome,
-                        status = ocorrencia.status.orEmpty(),
+                        status = ocorrencia.status.normalizedApiValue(),
                         categoria = "medicamento"
                     )
                 }
@@ -246,7 +279,7 @@ class HistoricoViewModel(private val authApi: AuthApi) : ViewModel() {
                     HistoricoRegistroUi(
                         data = formatarDiaMes(data),
                         nome = nome,
-                        status = registro.status.orEmpty(),
+                        status = registro.status.normalizedApiValue(),
                         categoria = "exercicio"
                     )
                 }
@@ -268,7 +301,14 @@ class HistoricoViewModel(private val authApi: AuthApi) : ViewModel() {
     private fun datasDoMes(mesReferencia: Calendar): List<String> {
         val calendar = mesReferencia.clone() as Calendar
         calendar.set(Calendar.DAY_OF_MONTH, 1)
-        val ultimoDia = calendar.getActualMaximum(Calendar.DAY_OF_MONTH)
+        val hoje = Calendar.getInstance()
+        val isMesAtual = calendar.get(Calendar.YEAR) == hoje.get(Calendar.YEAR) &&
+            calendar.get(Calendar.MONTH) == hoje.get(Calendar.MONTH)
+        val ultimoDia = if (isMesAtual) {
+            hoje.get(Calendar.DAY_OF_MONTH)
+        } else {
+            calendar.getActualMaximum(Calendar.DAY_OF_MONTH)
+        }
         val formatter = SimpleDateFormat("yyyy-MM-dd", Locale.US)
         val datas = mutableListOf<String>()
 
@@ -310,6 +350,7 @@ class HistoricoViewModel(private val authApi: AuthApi) : ViewModel() {
     private fun extrairDataIso(dataHora: String?): String {
         return dataHora
             .orEmpty()
+            .trim()
             .substringBefore("T")
             .substringBefore(" ")
     }
@@ -319,6 +360,10 @@ class HistoricoViewModel(private val authApi: AuthApi) : ViewModel() {
             .format(mesReferencia.time)
         return texto.replaceFirstChar { it.uppercase() }
     }
+}
+
+private fun String?.normalizedApiValue(): String {
+    return orEmpty().trim().uppercase(Locale.US)
 }
 
 class HistoricoViewModelFactory(private val authApi: AuthApi) : ViewModelProvider.Factory {

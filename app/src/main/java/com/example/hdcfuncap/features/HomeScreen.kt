@@ -44,6 +44,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.hdcfuncap.components.HdcBottomBar
+import com.example.hdcfuncap.components.HdcPullToRefresh
 import com.example.hdcfuncap.network.MedicamentoHojeResponse
 import com.example.hdcfuncap.storage.UserPreferences
 
@@ -61,6 +62,7 @@ fun HomeScreen(
     val medicamentos by viewModel.medicamentos.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     val errorMessage by viewModel.errorMessage.collectAsState()
+    val isInitialLoading = isLoading && medicamentos.isEmpty()
 
     LaunchedEffect(pacienteId) {
         pacienteId?.let { id ->
@@ -90,112 +92,120 @@ fun HomeScreen(
             )
         }
     ) { innerPadding ->
-
-        LazyColumn(
+        HdcPullToRefresh(
+            isRefreshing = isLoading,
+            onRefresh = {
+                pacienteId?.let { id -> viewModel.carregarDados(id, forceRefresh = true) }
+            },
             modifier = Modifier
                 .fillMaxSize()
                 .background(corFundo)
                 .padding(innerPadding)
-                .padding(horizontal = 24.dp),
-            contentPadding = PaddingValues(top = 32.dp, bottom = 32.dp)
         ) {
-            item {
-                Text(
-                    text = "Bom dia, $pacienteNome!",
-                    fontSize = 24.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = corTextoPrincipal
-                )
-
-                Text(
-                    text = dataAtual,
-                    fontSize = 14.sp,
-                    color = corTextoSecundario
-                )
-
-                Spacer(modifier = Modifier.height(24.dp))
-            }
-
-            item {
-                DashboardProgressoCard(
-                    medicamentos = medicamentos,
-                    isLoading = isLoading
-                )
-
-                Spacer(modifier = Modifier.height(24.dp))
-            }
-
-            errorMessage?.let { message ->
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 24.dp),
+                contentPadding = PaddingValues(top = 32.dp, bottom = 32.dp)
+            ) {
                 item {
                     Text(
-                        text = message,
-                        color = Color(0xFFC62828),
-                        fontSize = 13.sp,
-                        modifier = Modifier.padding(bottom = 16.dp)
-                    )
-                }
-            }
-
-            item {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Outlined.Medication,
-                        contentDescription = null,
-                        tint = azulHdc,
-                        modifier = Modifier.size(20.dp)
-                    )
-
-                    Spacer(modifier = Modifier.width(8.dp))
-
-                    Text(
-                        text = "Remédios",
-                        fontSize = 18.sp,
+                        text = "Bom dia, $pacienteNome!",
+                        fontSize = 24.sp,
                         fontWeight = FontWeight.Bold,
                         color = corTextoPrincipal
                     )
+
+                    Text(
+                        text = dataAtual,
+                        fontSize = 14.sp,
+                        color = corTextoSecundario
+                    )
+
+                    Spacer(modifier = Modifier.height(24.dp))
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
-            }
-
-            if (isLoading) {
                 item {
-                    Box(
-                        modifier = Modifier.fillMaxWidth(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        CircularProgressIndicator(color = azulHdc)
+                    DashboardProgressoCard(
+                        medicamentos = medicamentos,
+                        isLoading = isInitialLoading
+                    )
+
+                    Spacer(modifier = Modifier.height(24.dp))
+                }
+
+                errorMessage?.let { message ->
+                    item {
+                        Text(
+                            text = message,
+                            color = Color(0xFFC62828),
+                            fontSize = 13.sp,
+                            modifier = Modifier.padding(bottom = 16.dp)
+                        )
                     }
                 }
-            } else {
-                items(medicamentos) { med ->
-                    MedicamentoCard(medicamento = med)
-                    Spacer(modifier = Modifier.height(12.dp))
-                }
-            }
 
-            item {
-                Spacer(modifier = Modifier.height(16.dp))
+                item {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Outlined.Medication,
+                            contentDescription = null,
+                            tint = azulHdc,
+                            modifier = Modifier.size(20.dp)
+                        )
 
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Outlined.Restaurant,
-                        contentDescription = null,
-                        tint = Color(0xFFF4A261),
-                        modifier = Modifier.size(20.dp)
-                    )
+                        Spacer(modifier = Modifier.width(8.dp))
 
-                    Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Remédios",
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = corTextoPrincipal
+                        )
+                    }
 
-                    Text(
-                        text = "Alimentação",
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = corTextoPrincipal
-                    )
+                    Spacer(modifier = Modifier.height(16.dp))
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
+                if (isInitialLoading) {
+                    item {
+                        Box(
+                            modifier = Modifier.fillMaxWidth(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CircularProgressIndicator(color = azulHdc)
+                        }
+                    }
+                } else {
+                    items(medicamentos) { med ->
+                        MedicamentoCard(medicamento = med)
+                        Spacer(modifier = Modifier.height(12.dp))
+                    }
+                }
+
+                item {
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Outlined.Restaurant,
+                            contentDescription = null,
+                            tint = Color(0xFFF4A261),
+                            modifier = Modifier.size(20.dp)
+                        )
+
+                        Spacer(modifier = Modifier.width(8.dp))
+
+                        Text(
+                            text = "Alimentação",
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = corTextoPrincipal
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+                }
             }
         }
     }

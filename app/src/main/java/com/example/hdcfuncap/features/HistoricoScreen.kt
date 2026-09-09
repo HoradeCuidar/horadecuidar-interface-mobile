@@ -43,6 +43,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalContext
 import com.example.hdcfuncap.components.HdcBottomBar
+import com.example.hdcfuncap.components.HdcPullToRefresh
 import com.example.hdcfuncap.storage.UserPreferences
 
 @Composable
@@ -56,6 +57,7 @@ fun HistoricoScreen(
     val uiState by viewModel.uiState.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     val errorMessage by viewModel.errorMessage.collectAsState()
+    val isInitialLoading = isLoading && uiState.mesAno.isBlank()
 
     LaunchedEffect(pacienteId) {
         pacienteId?.let { viewModel.carregarHistorico(it) }
@@ -69,122 +71,131 @@ fun HistoricoScreen(
             )
         }
     ) { innerPadding ->
-        LazyColumn(
+        HdcPullToRefresh(
+            isRefreshing = isLoading,
+            onRefresh = {
+                pacienteId?.let { viewModel.carregarHistorico(it, forceRefresh = true) }
+            },
             modifier = Modifier
                 .fillMaxSize()
                 .background(Color(0xFFF8F9FA))
                 .padding(innerPadding)
-                .padding(horizontal = 24.dp),
-            contentPadding = PaddingValues(top = 40.dp, bottom = 32.dp)
         ) {
-            item {
-                Text(
-                    text = "Meu Histórico",
-                    color = Color(0xFF1E293B),
-                    fontSize = 24.sp,
-                    fontWeight = FontWeight.Bold
-                )
-
-                Spacer(modifier = Modifier.height(28.dp))
-
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(2.dp)
-                ) {
-                    if (uiState.canCarregarMesAnterior) {
-                        IconButton(
-                            onClick = {
-                                pacienteId?.let { viewModel.carregarMesAnterior(it) }
-                            },
-                            modifier = Modifier.size(32.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
-                                contentDescription = "Mês anterior",
-                                tint = Color(0xFF1E293B)
-                            )
-                        }
-                    } else {
-                        Spacer(modifier = Modifier.size(32.dp))
-                    }
-
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 24.dp),
+                contentPadding = PaddingValues(top = 40.dp, bottom = 32.dp)
+            ) {
+                item {
                     Text(
-                        text = uiState.mesAno.ifBlank { "Mês atual" },
+                        text = "Meu Histórico",
                         color = Color(0xFF1E293B),
-                        fontSize = 18.sp,
+                        fontSize = 24.sp,
                         fontWeight = FontWeight.Bold
                     )
 
-                    if (uiState.canCarregarProximoMes) {
-                        IconButton(
-                            onClick = {
-                                pacienteId?.let { viewModel.carregarProximoMes(it) }
-                            },
-                            modifier = Modifier.size(32.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                                contentDescription = "Voltar para mês mais recente",
-                                tint = Color(0xFF1E293B)
-                            )
-                        }
-                    } else {
-                        Spacer(modifier = Modifier.size(32.dp))
-                    }
-                }
+                    Spacer(modifier = Modifier.height(28.dp))
 
-                Spacer(modifier = Modifier.height(14.dp))
-            }
-
-            if (isLoading) {
-                item {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(180.dp),
-                        contentAlignment = Alignment.Center
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(2.dp)
                     ) {
-                        CircularProgressIndicator(color = Color(0xFF6B9DFE))
-                    }
-                }
-            } else {
-                errorMessage?.let { message ->
-                    item {
+                        if (uiState.canCarregarMesAnterior) {
+                            IconButton(
+                                onClick = {
+                                    pacienteId?.let { viewModel.carregarMesAnterior(it) }
+                                },
+                                modifier = Modifier.size(32.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
+                                    contentDescription = "Mês anterior",
+                                    tint = Color(0xFF1E293B)
+                                )
+                            }
+                        } else {
+                            Spacer(modifier = Modifier.size(32.dp))
+                        }
+
                         Text(
-                            text = message,
-                            color = Color(0xFFC62828),
-                            fontSize = 13.sp,
-                            modifier = Modifier.padding(bottom = 14.dp)
+                            text = uiState.mesAno.ifBlank { "Mês atual" },
+                            color = Color(0xFF1E293B),
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold
                         )
+
+                        if (uiState.canCarregarProximoMes) {
+                            IconButton(
+                                onClick = {
+                                    pacienteId?.let { viewModel.carregarProximoMes(it) }
+                                },
+                                modifier = Modifier.size(32.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                                    contentDescription = "Voltar para mês mais recente",
+                                    tint = Color(0xFF1E293B)
+                                )
+                            }
+                        } else {
+                            Spacer(modifier = Modifier.size(32.dp))
+                        }
                     }
-                }
-
-                item {
-                    HistoricoGraficoCard(semanas = uiState.semanas)
-
-                    Spacer(modifier = Modifier.height(22.dp))
-
-                    Text(
-                        text = "Registros recentes",
-                        color = Color(0xFF1E293B),
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold
-                    )
 
                     Spacer(modifier = Modifier.height(14.dp))
                 }
 
-                if (uiState.registrosRecentes.isEmpty()) {
+                if (isInitialLoading) {
                     item {
-                        Text(
-                            text = "Nenhum registro encontrado hoje ou ontem.",
-                            color = Color(0xFF6B7280),
-                            fontSize = 14.sp
-                        )
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(180.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CircularProgressIndicator(color = Color(0xFF6B9DFE))
+                        }
                     }
                 } else {
+                    errorMessage?.let { message ->
+                        item {
+                            Text(
+                                text = message,
+                                color = Color(0xFFC62828),
+                                fontSize = 13.sp,
+                                modifier = Modifier.padding(bottom = 14.dp)
+                            )
+                        }
+                    }
+
                     item {
-                        RegistrosRecentesCard(registros = uiState.registrosRecentes)
+                        HistoricoGraficoCard(semanas = uiState.semanas)
+
+                        Spacer(modifier = Modifier.height(22.dp))
+
+                        Text(
+                            text = "Registros recentes",
+                            color = Color(0xFF1E293B),
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+
+                        Spacer(modifier = Modifier.height(14.dp))
+                    }
+
+                    if (uiState.registrosRecentes.isEmpty()) {
+                        item {
+                            Text(
+                                text = "Nenhum registro encontrado hoje ou ontem.",
+                                color = Color(0xFF6B7280),
+                                fontSize = 14.sp
+                            )
+                        }
+                    } else {
+                        item {
+                            RegistrosRecentesCard(registros = uiState.registrosRecentes)
+                        }
                     }
                 }
             }

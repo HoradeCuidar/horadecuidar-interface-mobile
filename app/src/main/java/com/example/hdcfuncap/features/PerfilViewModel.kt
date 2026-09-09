@@ -1,5 +1,6 @@
 package com.example.hdcfuncap.features
 
+import android.os.SystemClock
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -12,6 +13,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 class PerfilViewModel(private val authApi: AuthApi) : ViewModel() {
+    private companion object {
+        const val AUTO_REFRESH_INTERVAL_MS = 5 * 60_000L
+    }
 
     private val _profile = MutableStateFlow<PacienteProfileResponse?>(null)
     val profile: StateFlow<PacienteProfileResponse?> = _profile.asStateFlow()
@@ -25,13 +29,19 @@ class PerfilViewModel(private val authApi: AuthApi) : ViewModel() {
     private val _isSaving = MutableStateFlow(false)
     val isSaving: StateFlow<Boolean> = _isSaving.asStateFlow()
 
-    fun carregarPerfil() {
+    private var lastLoadedAtMillis = 0L
+
+    fun carregarPerfil(forceRefresh: Boolean = false) {
+        if (_isLoading.value) return
+        if (!forceRefresh && isCacheFresh()) return
+
         viewModelScope.launch {
             _isLoading.value = true
             _errorMessage.value = null
 
             try {
                 _profile.value = authApi.getPacienteProfile()
+                lastLoadedAtMillis = SystemClock.elapsedRealtime()
             } catch (e: Exception) {
                 _errorMessage.value = "Não foi possível carregar seu perfil."
             } finally {
@@ -50,6 +60,7 @@ class PerfilViewModel(private val authApi: AuthApi) : ViewModel() {
 
             try {
                 _profile.value = authApi.atualizarPacientePerfil(request)
+                lastLoadedAtMillis = SystemClock.elapsedRealtime()
                 onSuccess()
             } catch (e: Exception) {
                 _errorMessage.value = "Não foi possível atualizar seu perfil."
@@ -57,6 +68,12 @@ class PerfilViewModel(private val authApi: AuthApi) : ViewModel() {
                 _isSaving.value = false
             }
         }
+    }
+
+    private fun isCacheFresh(): Boolean {
+        return _profile.value != null &&
+            lastLoadedAtMillis > 0L &&
+            SystemClock.elapsedRealtime() - lastLoadedAtMillis < AUTO_REFRESH_INTERVAL_MS
     }
 }
 

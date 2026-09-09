@@ -84,6 +84,7 @@ data class PrescricaoMedicamentoResponse(
     val nomeProfissional: String?,
     val dataInicio: String?,
     val dataFim: String?,
+    val ativo: Boolean?,
     val itens: List<ItemMedicacaoResponse>?,
     val medicacoes: List<ItemMedicacaoResponse>?
 )
@@ -99,7 +100,9 @@ data class ItemMedicacaoResponse(
     val dosagemUnidade: String?,
     val quantidadeDoses: Int?,
     val intervaloValor: Int?,
-    val intervaloTipo: String?
+    val intervaloTipo: String?,
+    val ativo: Boolean?,
+    val observacao: String?
 )
 
 data class MedicamentosDiaResponse(

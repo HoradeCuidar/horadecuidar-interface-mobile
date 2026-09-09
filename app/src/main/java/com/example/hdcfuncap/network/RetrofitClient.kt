@@ -7,17 +7,28 @@ import okhttp3.Interceptor
 import okhttp3.OkHttpClient
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
+import java.util.concurrent.TimeUnit
 
 object RetrofitClient {
-    private const val BASE_URL = "http://10.0.2.2:8080/api/"
+    private const val BASE_URL = "https://horadecuidar-api-production.up.railway.app/api/"
     @Volatile
     private var sessionExpiredHandler: (() -> Unit)? = null
+    @Volatile
+    private var authApi: AuthApi? = null
 
     fun setSessionExpiredHandler(handler: (() -> Unit)?) {
         sessionExpiredHandler = handler
     }
 
     fun getAuthApi(context: Context): AuthApi {
+        authApi?.let { return it }
+
+        return synchronized(this) {
+            authApi ?: createAuthApi(context.applicationContext).also { authApi = it }
+        }
+    }
+
+    private fun createAuthApi(context: Context): AuthApi {
         val userPreferences = UserPreferences(context)
 
         val authInterceptor = Interceptor { chain ->
@@ -33,7 +44,7 @@ object RetrofitClient {
             }
 
             val response = chain.proceed(newRequest)
-            val statusCode = response.code()
+            val statusCode = response.code
             if (!token.isNullOrEmpty() && (statusCode == 401 || statusCode == 403)) {
                 sessionExpiredHandler?.invoke()
             }
@@ -41,6 +52,9 @@ object RetrofitClient {
         }
 
         val okHttpClient = OkHttpClient.Builder()
+            .connectTimeout(20, TimeUnit.SECONDS)
+            .readTimeout(30, TimeUnit.SECONDS)
+            .writeTimeout(30, TimeUnit.SECONDS)
             .addInterceptor(authInterceptor)
             .build()
 

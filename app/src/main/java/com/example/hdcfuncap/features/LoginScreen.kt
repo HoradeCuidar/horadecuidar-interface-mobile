@@ -23,7 +23,9 @@ import com.example.hdcfuncap.R
 import com.example.hdcfuncap.network.LoginRequest
 import com.example.hdcfuncap.network.RetrofitClient
 import com.example.hdcfuncap.storage.UserPreferences
+import java.io.IOException
 import kotlinx.coroutines.launch
+import retrofit2.HttpException
 
 @Composable
 fun LoginScreen(
@@ -201,7 +203,17 @@ fun LoginScreen(
 
                         onLoginSuccess()
                     } catch (e: Exception) {
-                        loginMessage = "Usuário ou senha inválidos. Confira os dados enviados pelo seu médico."
+                        loginMessage = when (e) {
+                            is IOException -> "Não foi possível conectar ao servidor. Verifique sua internet e tente novamente."
+                            is HttpException -> {
+                                if (e.code() == 401 || e.code() == 403) {
+                                    "Usuário ou senha inválidos. Confira os dados enviados pelo seu médico."
+                                } else {
+                                    "O servidor não conseguiu concluir o login agora. Tente novamente em instantes."
+                                }
+                            }
+                            else -> "Não foi possível entrar agora. Tente novamente."
+                        }
                     } finally {
                         isLoading = false
                     }

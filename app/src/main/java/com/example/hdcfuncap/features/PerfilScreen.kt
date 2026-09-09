@@ -52,6 +52,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.hdcfuncap.components.HdcBottomBar
+import com.example.hdcfuncap.components.HdcPullToRefresh
 import com.example.hdcfuncap.network.PacienteProfileResponse
 
 @Composable
@@ -60,12 +61,14 @@ fun PerfilScreen(
     onOpenDetails: () -> Unit,
     onOpenEdit: () -> Unit,
     onOpenSettings: () -> Unit,
+    onOpenChangePassword: () -> Unit,
     onLogout: () -> Unit,
     viewModel: PerfilViewModel
 ) {
     val profile by viewModel.profile.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     val errorMessage by viewModel.errorMessage.collectAsState()
+    val isInitialLoading = isLoading && profile == null
 
     LaunchedEffect(Unit) {
         viewModel.carregarPerfil()
@@ -79,112 +82,129 @@ fun PerfilScreen(
             )
         }
     ) { innerPadding ->
-        LazyColumn(
+        HdcPullToRefresh(
+            isRefreshing = isLoading,
+            onRefresh = { viewModel.carregarPerfil(forceRefresh = true) },
             modifier = Modifier
                 .fillMaxSize()
                 .background(Color(0xFFF8F9FA))
                 .padding(innerPadding)
-                .padding(horizontal = 24.dp),
-            contentPadding = PaddingValues(top = 40.dp, bottom = 32.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            item {
-                Text(
-                    text = "Meu Perfil",
-                    fontSize = 24.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color(0xFF1E293B)
-                )
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 24.dp),
+                contentPadding = PaddingValues(top = 40.dp, bottom = 32.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                item {
+                    Text(
+                        text = "Meu Perfil",
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF1E293B)
+                    )
 
-                Spacer(modifier = Modifier.height(18.dp))
-            }
+                    Spacer(modifier = Modifier.height(18.dp))
+                }
 
-            when {
-                isLoading && profile == null -> {
-                    item {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(160.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            CircularProgressIndicator(color = Color(0xFF6B9DFE))
+                when {
+                    isInitialLoading -> {
+                        item {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(160.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                CircularProgressIndicator(color = Color(0xFF6B9DFE))
+                            }
                         }
                     }
-                }
 
-                errorMessage != null && profile == null -> {
-                    item {
-                        Text(
-                            text = errorMessage.orEmpty(),
-                            color = Color(0xFFC62828),
-                            fontSize = 14.sp
-                        )
-                    }
-                }
-
-                else -> {
-                    profile?.let { paciente ->
+                    errorMessage != null && profile == null -> {
                         item {
-                            ProfileHeaderCard(
-                                paciente = paciente,
-                                onClick = onOpenDetails,
-                                onEditClick = onOpenEdit
+                            Text(
+                                text = errorMessage.orEmpty(),
+                                color = Color(0xFFC62828),
+                                fontSize = 14.sp
                             )
                         }
+                    }
 
-                        item {
-                            SectionTitle("INFORMAÇÕES")
-                            Spacer(modifier = Modifier.height(8.dp))
-                            InfoCard(paciente)
+                    else -> {
+                        errorMessage?.let { message ->
+                            item {
+                                Text(
+                                    text = message,
+                                    color = Color(0xFFC62828),
+                                    fontSize = 13.sp
+                                )
+                            }
+                        }
+
+                        profile?.let { paciente ->
+                            item {
+                                ProfileHeaderCard(
+                                    paciente = paciente,
+                                    onClick = onOpenDetails,
+                                    onEditClick = onOpenEdit
+                                )
+                            }
+
+                            item {
+                                SectionTitle("INFORMAÇÕES")
+                                Spacer(modifier = Modifier.height(8.dp))
+                                InfoCard(paciente)
+                            }
                         }
                     }
                 }
-            }
 
-            item {
-                SectionTitle("AJUSTES")
-                Spacer(modifier = Modifier.height(8.dp))
+                item {
+                    SectionTitle("AJUSTES")
+                    Spacer(modifier = Modifier.height(8.dp))
 
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color.White),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-                ) {
-                    Column(modifier = Modifier.fillMaxWidth()) {
-                        ProfileActionRow(
-                            icon = Icons.Outlined.Notifications,
-                            iconTint = Color(0xFF6B9DFE),
-                            iconBackground = Color(0xFFEAF1FF),
-                            label = "Lembretes",
-                            onClick = {}
-                        )
-                        HorizontalDivider(color = Color(0xFFF0F2F5))
-                        ProfileActionRow(
-                            icon = Icons.Outlined.Lock,
-                            iconTint = Color(0xFF6B7280),
-                            iconBackground = Color(0xFFF2F5FA),
-                            label = "Alterar senha",
-                            onClick = {}
-                        )
-                        HorizontalDivider(color = Color(0xFFF0F2F5))
-                        ProfileActionRow(
-                            icon = Icons.Outlined.Settings,
-                            iconTint = Color(0xFF6B9DFE),
-                            iconBackground = Color(0xFFEAF1FF),
-                            label = "Configurações",
-                            onClick = onOpenSettings
-                        )
-                        HorizontalDivider(color = Color(0xFFF0F2F5))
-                        ProfileActionRow(
-                            icon = Icons.AutoMirrored.Outlined.Logout,
-                            iconTint = Color(0xFFE5484D),
-                            iconBackground = Color(0xFFFFECEC),
-                            label = "Sair do aplicativo",
-                            labelColor = Color(0xFFE5484D),
-                            onClick = onLogout
-                        )
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color.White),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                    ) {
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            ProfileActionRow(
+                                icon = Icons.Outlined.Notifications,
+                                iconTint = Color(0xFF6B9DFE),
+                                iconBackground = Color(0xFFEAF1FF),
+                                label = "Lembretes",
+                                onClick = {}
+                            )
+                            HorizontalDivider(color = Color(0xFFF0F2F5))
+                            ProfileActionRow(
+                                icon = Icons.Outlined.Lock,
+                                iconTint = Color(0xFF6B7280),
+                                iconBackground = Color(0xFFF2F5FA),
+                                label = "Alterar senha",
+                                onClick = onOpenChangePassword
+                            )
+                            HorizontalDivider(color = Color(0xFFF0F2F5))
+                            ProfileActionRow(
+                                icon = Icons.Outlined.Settings,
+                                iconTint = Color(0xFF6B9DFE),
+                                iconBackground = Color(0xFFEAF1FF),
+                                label = "Configurações",
+                                onClick = onOpenSettings
+                            )
+                            HorizontalDivider(color = Color(0xFFF0F2F5))
+                            ProfileActionRow(
+                                icon = Icons.AutoMirrored.Outlined.Logout,
+                                iconTint = Color(0xFFE5484D),
+                                iconBackground = Color(0xFFFFECEC),
+                                label = "Sair do aplicativo",
+                                labelColor = Color(0xFFE5484D),
+                                onClick = onLogout
+                            )
+                        }
                     }
                 }
             }
@@ -262,123 +282,141 @@ fun PerfilDetalhesScreen(
     val profile by viewModel.profile.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     val errorMessage by viewModel.errorMessage.collectAsState()
+    val isInitialLoading = isLoading && profile == null
 
     LaunchedEffect(Unit) {
         viewModel.carregarPerfil()
     }
 
     Scaffold { innerPadding ->
-        LazyColumn(
+        HdcPullToRefresh(
+            isRefreshing = isLoading,
+            onRefresh = { viewModel.carregarPerfil(forceRefresh = true) },
             modifier = Modifier
                 .fillMaxSize()
                 .background(Color(0xFFF8F9FA))
                 .padding(innerPadding)
-                .padding(horizontal = 24.dp),
-            contentPadding = PaddingValues(top = 32.dp, bottom = 32.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            item {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    IconButton(onClick = onBack) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Voltar",
-                            tint = Color(0xFF1E293B)
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.width(6.dp))
-
-                    Text(
-                        text = "Dados do perfil",
-                        fontSize = 22.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFF1E293B)
-                    )
-                }
-            }
-
-            when {
-                isLoading && profile == null -> {
-                    item {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(180.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            CircularProgressIndicator(color = Color(0xFF6B9DFE))
-                        }
-                    }
-                }
-
-                errorMessage != null && profile == null -> {
-                    item {
-                        Text(
-                            text = errorMessage.orEmpty(),
-                            color = Color(0xFFC62828),
-                            fontSize = 14.sp
-                        )
-                    }
-                }
-
-                else -> {
-                    profile?.let { paciente ->
-                        item {
-                            DetailsHeaderCard(paciente)
-                        }
-
-                        item {
-                            SectionTitle("INFORMAÇÕES PESSOAIS")
-                            Spacer(modifier = Modifier.height(8.dp))
-                            DetailsCard(
-                                rows = listOf(
-                                    DetailRowData(Icons.Outlined.Person, "Nome", paciente.nome.orEmpty()),
-                                    DetailRowData(Icons.Outlined.Email, "E-mail", paciente.email.orEmpty()),
-                                    DetailRowData(Icons.Outlined.Person, "Usuário", paciente.username.orEmpty()),
-                                    DetailRowData(Icons.Outlined.Phone, "Telefone", paciente.telefone.orEmpty()),
-                                    DetailRowData(Icons.Outlined.CalendarMonth, "Nascimento", formatDate(paciente.dataDeNascimento)),
-                                    DetailRowData(Icons.Outlined.Person, "Gênero", formatGender(paciente.genero))
-                                )
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 24.dp),
+                contentPadding = PaddingValues(top = 32.dp, bottom = 32.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                item {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        IconButton(onClick = onBack) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "Voltar",
+                                tint = Color(0xFF1E293B)
                             )
                         }
 
+                        Spacer(modifier = Modifier.width(6.dp))
+
+                        Text(
+                            text = "Dados do perfil",
+                            fontSize = 22.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF1E293B)
+                        )
+                    }
+                }
+
+                when {
+                    isInitialLoading -> {
                         item {
-                            SectionTitle("SAÚDE")
-                            Spacer(modifier = Modifier.height(8.dp))
-                            DetailsCard(
-                                rows = listOf(
-                                    DetailRowData(
-                                        icon = Icons.Outlined.MedicalInformation,
-                                        title = "Condições",
-                                        value = paciente.doencas
-                                            .orEmpty()
-                                            .joinToString(" • ") { it.nome.orEmpty() }
-                                    ),
-                                    DetailRowData(
-                                        icon = Icons.AutoMirrored.Outlined.StickyNote2,
-                                        title = "Observações",
-                                        value = paciente.observacoes.orEmpty()
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(180.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                CircularProgressIndicator(color = Color(0xFF6B9DFE))
+                            }
+                        }
+                    }
+
+                    errorMessage != null && profile == null -> {
+                        item {
+                            Text(
+                                text = errorMessage.orEmpty(),
+                                color = Color(0xFFC62828),
+                                fontSize = 14.sp
+                            )
+                        }
+                    }
+
+                    else -> {
+                        errorMessage?.let { message ->
+                            item {
+                                Text(
+                                    text = message,
+                                    color = Color(0xFFC62828),
+                                    fontSize = 13.sp
+                                )
+                            }
+                        }
+
+                        profile?.let { paciente ->
+                            item {
+                                DetailsHeaderCard(paciente)
+                            }
+
+                            item {
+                                SectionTitle("INFORMAÇÕES PESSOAIS")
+                                Spacer(modifier = Modifier.height(8.dp))
+                                DetailsCard(
+                                    rows = listOf(
+                                        DetailRowData(Icons.Outlined.Person, "Nome", paciente.nome.orEmpty()),
+                                        DetailRowData(Icons.Outlined.Email, "E-mail", paciente.email.orEmpty()),
+                                        DetailRowData(Icons.Outlined.Person, "Usuário", paciente.username.orEmpty()),
+                                        DetailRowData(Icons.Outlined.Phone, "Telefone", paciente.telefone.orEmpty()),
+                                        DetailRowData(Icons.Outlined.CalendarMonth, "Nascimento", formatDate(paciente.dataDeNascimento)),
+                                        DetailRowData(Icons.Outlined.Person, "Gênero", formatGender(paciente.genero))
                                     )
                                 )
-                            )
-                        }
+                            }
 
-                        item {
-                            SectionTitle("ENDEREÇO")
-                            Spacer(modifier = Modifier.height(8.dp))
-                            DetailsCard(
-                                rows = listOf(
-                                    DetailRowData(Icons.Outlined.Home, "Rua", paciente.rua.orEmpty()),
-                                    DetailRowData(Icons.Outlined.Home, "Número", paciente.numeroDaCasa.orEmpty()),
-                                    DetailRowData(Icons.Outlined.Home, "Bairro", paciente.bairro.orEmpty()),
-                                    DetailRowData(Icons.Outlined.Home, "Cidade", paciente.cidade.orEmpty()),
-                                    DetailRowData(Icons.Outlined.Home, "Estado", paciente.estado.orEmpty())
+                            item {
+                                SectionTitle("SAÚDE")
+                                Spacer(modifier = Modifier.height(8.dp))
+                                DetailsCard(
+                                    rows = listOf(
+                                        DetailRowData(
+                                            icon = Icons.Outlined.MedicalInformation,
+                                            title = "Condições",
+                                            value = paciente.doencas
+                                                .orEmpty()
+                                                .joinToString(" • ") { it.nome.orEmpty() }
+                                        ),
+                                        DetailRowData(
+                                            icon = Icons.AutoMirrored.Outlined.StickyNote2,
+                                            title = "Observações",
+                                            value = paciente.observacoes.orEmpty()
+                                        )
+                                    )
                                 )
-                            )
+                            }
+
+                            item {
+                                SectionTitle("ENDEREÇO")
+                                Spacer(modifier = Modifier.height(8.dp))
+                                DetailsCard(
+                                    rows = listOf(
+                                        DetailRowData(Icons.Outlined.Home, "Rua", paciente.rua.orEmpty()),
+                                        DetailRowData(Icons.Outlined.Home, "Número", paciente.numeroDaCasa.orEmpty()),
+                                        DetailRowData(Icons.Outlined.Home, "Bairro", paciente.bairro.orEmpty()),
+                                        DetailRowData(Icons.Outlined.Home, "Cidade", paciente.cidade.orEmpty()),
+                                        DetailRowData(Icons.Outlined.Home, "Estado", paciente.estado.orEmpty())
+                                    )
+                                )
+                            }
                         }
                     }
                 }

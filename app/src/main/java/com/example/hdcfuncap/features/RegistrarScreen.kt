@@ -20,13 +20,17 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.SubcomposeAsyncImage
 import com.example.hdcfuncap.components.HdcBottomBar
+import com.example.hdcfuncap.components.HdcPullToRefresh
 import com.example.hdcfuncap.network.MedicamentoHojeResponse
+import com.example.hdcfuncap.network.OrientacaoFuncionalResponse
 import com.example.hdcfuncap.storage.UserPreferences
 
 @Composable
@@ -41,6 +45,7 @@ fun RegistrarScreen(
     val exercicios by viewModel.exercicios.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     val errorMessage by viewModel.errorMessage.collectAsState()
+    val isInitialLoading = isLoading && medicamentos.isEmpty() && exercicios.isEmpty()
     var exercicioSelecionado by remember { mutableStateOf<ExercicioRegistroUi?>(null) }
     var statusSelecionado by remember { mutableStateOf("REALIZADO") }
 
@@ -56,98 +61,112 @@ fun RegistrarScreen(
     Scaffold(
         bottomBar = { HdcBottomBar(currentScreen = "registrar", onNavigate = onNavigate) }
     ) { innerPadding ->
-        LazyColumn(
+        HdcPullToRefresh(
+            isRefreshing = isLoading,
+            onRefresh = {
+                pacienteId?.let { id -> viewModel.carregarDados(id, forceRefresh = true) }
+            },
             modifier = Modifier
                 .fillMaxSize()
                 .background(corFundo)
                 .padding(innerPadding)
-                .padding(horizontal = 24.dp),
-            contentPadding = PaddingValues(top = 32.dp, bottom = 32.dp)
         ) {
-            item {
-                Text(text = "Registrar agora", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = corTextoPrincipal)
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(text = "O que você fez agora?", fontSize = 16.sp, color = Color(0xFF757575))
-                Spacer(modifier = Modifier.height(24.dp))
-            }
-
-            errorMessage?.let { message ->
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 24.dp),
+                contentPadding = PaddingValues(top = 32.dp, bottom = 32.dp)
+            ) {
                 item {
-                    Text(
-                        text = message,
-                        color = Color(0xFFC62828),
-                        fontSize = 13.sp,
-                        modifier = Modifier.padding(bottom = 16.dp)
-                    )
-                }
-            }
-
-            if (isLoading) {
-                item { CircularProgressIndicator(modifier = Modifier.fillMaxWidth().wrapContentWidth(Alignment.CenterHorizontally)) }
-            } else {
-                item {
-                    RegistroSectionHeader(
-                        title = "Prescrições de hoje",
-                        subtitle = "Medicamentos previstos para o seu tratamento"
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(text = "Registrar agora", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = corTextoPrincipal)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(text = "O que você fez agora?", fontSize = 16.sp, color = Color(0xFF757575))
+                    Spacer(modifier = Modifier.height(24.dp))
                 }
 
-                if (medicamentos.isEmpty()) {
+                errorMessage?.let { message ->
                     item {
                         Text(
-                            text = "Nenhum medicamento previsto para hoje.",
-                            fontSize = 14.sp,
-                            color = Color.Gray,
-                            modifier = Modifier.padding(bottom = 18.dp)
+                            text = message,
+                            color = Color(0xFFC62828),
+                            fontSize = 13.sp,
+                            modifier = Modifier.padding(bottom = 16.dp)
                         )
                     }
                 }
 
-                items(medicamentos) { med ->
-                    RegistroMedicamentoCard(
-                        medicamento = med,
-                        onRegistrar = { status ->
-                            pacienteId?.let { id ->
-                                viewModel.registrarAdesao(
-                                    medicamento = med,
-                                    status = status,
-                                    pacienteId = id
-                                )
+                if (isInitialLoading) {
+                    item {
+                        CircularProgressIndicator(
+                            color = Color(0xFF6B9DFE),
+                            modifier = Modifier.fillMaxWidth().wrapContentWidth(Alignment.CenterHorizontally)
+                        )
+                    }
+                } else {
+                    item {
+                        RegistroSectionHeader(
+                            title = "Prescrições de hoje",
+                            subtitle = "Medicamentos previstos para o seu tratamento"
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                    }
+
+                    if (medicamentos.isEmpty()) {
+                        item {
+                            Text(
+                                text = "Nenhum medicamento previsto para hoje.",
+                                fontSize = 14.sp,
+                                color = Color.Gray,
+                                modifier = Modifier.padding(bottom = 18.dp)
+                            )
+                        }
+                    }
+
+                    items(medicamentos) { med ->
+                        RegistroMedicamentoCard(
+                            medicamento = med,
+                            onRegistrar = { status ->
+                                pacienteId?.let { id ->
+                                    viewModel.registrarAdesao(
+                                        medicamento = med,
+                                        status = status,
+                                        pacienteId = id
+                                    )
+                                }
                             }
-                        }
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-                }
-
-                item {
-                    Spacer(modifier = Modifier.height(8.dp))
-                    RegistroSectionHeader(
-                        title = "Recomendações de exercícios",
-                        subtitle = "Orientações funcionais para registrar quando realizar"
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-                }
-
-                if (exercicios.isEmpty()) {
-                    item {
-                        Text(
-                            text = "Nenhuma orientação de exercício disponível.",
-                            fontSize = 14.sp,
-                            color = Color.Gray
                         )
+                        Spacer(modifier = Modifier.height(16.dp))
                     }
-                }
 
-                items(exercicios) { exercicio ->
-                    RegistroExercicioCard(
-                        exercicio = exercicio,
-                        onRegistrar = { status ->
-                            exercicioSelecionado = exercicio
-                            statusSelecionado = status
+                    item {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        RegistroSectionHeader(
+                            title = "Recomendações de exercícios",
+                            subtitle = "Orientações funcionais para registrar quando realizar"
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                    }
+
+                    if (exercicios.isEmpty()) {
+                        item {
+                            Text(
+                                text = "Nenhuma orientação de exercício disponível.",
+                                fontSize = 14.sp,
+                                color = Color.Gray
+                            )
                         }
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
+                    }
+
+                    items(exercicios) { exercicio ->
+                        RegistroExercicioCard(
+                            exercicio = exercicio,
+                            onRegistrar = { status ->
+                                exercicioSelecionado = exercicio
+                                statusSelecionado = status
+                            }
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                    }
                 }
             }
         }
@@ -174,7 +193,6 @@ fun RegistrarScreen(
         )
     }
 }
-
 @Composable
 private fun RegistroSectionHeader(
     title: String,
@@ -371,7 +389,7 @@ fun RegistroExercicioCard(
     exercicio: ExercicioRegistroUi,
     onRegistrar: (String) -> Unit
 ) {
-    val status = exercicio.registroHoje?.status
+    val status = exercicio.registroHoje?.status.normalizedApiValue().ifBlank { null }
     val isRealizado = status == "REALIZADO"
     val isParcial = status == "PARCIALMENTE_REALIZADO"
 
@@ -401,19 +419,10 @@ fun RegistroExercicioCard(
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    modifier = Modifier
-                        .size(40.dp)
-                        .background(Color(0xFFEAF8F0), CircleShape),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Outlined.DirectionsWalk,
-                        contentDescription = null,
-                        tint = Color(0xFF57C47A),
-                        modifier = Modifier.size(24.dp)
-                    )
-                }
+                ExercicioImagem(
+                    urlImagem = exercicio.orientacao.urlImagem,
+                    modifier = Modifier.size(44.dp)
+                )
 
                 Spacer(modifier = Modifier.width(16.dp))
 
@@ -450,6 +459,12 @@ fun RegistroExercicioCard(
                         )
                     }
                 }
+            }
+
+            val tags = exercicio.orientacao.tagsNomes()
+            if (tags.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(12.dp))
+                TagsTexto(tags = tags)
             }
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -562,8 +577,64 @@ fun RegistroExercicioCard(
     }
 }
 
+@Composable
+private fun ExercicioImagem(
+    urlImagem: String?,
+    modifier: Modifier = Modifier
+) {
+    val imagem = urlImagem.normalizarUrlImagem()
+
+    if (imagem == null) {
+        ExercicioImagemFallback(modifier = modifier)
+        return
+    }
+
+    SubcomposeAsyncImage(
+        model = imagem,
+        contentDescription = null,
+        contentScale = ContentScale.Crop,
+        modifier = modifier
+            .clip(RoundedCornerShape(12.dp))
+            .background(Color(0xFFEAF8F0)),
+        loading = {
+            ExercicioImagemFallback(modifier = Modifier.fillMaxSize())
+        },
+        error = {
+            ExercicioImagemFallback(modifier = Modifier.fillMaxSize())
+        }
+    )
+}
+
+@Composable
+private fun ExercicioImagemFallback(modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(12.dp))
+            .background(Color(0xFFEAF8F0)),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            imageVector = Icons.AutoMirrored.Outlined.DirectionsWalk,
+            contentDescription = null,
+            tint = Color(0xFF57C47A),
+            modifier = Modifier.size(24.dp)
+        )
+    }
+}
+
+@Composable
+private fun TagsTexto(tags: List<String>) {
+    Text(
+        text = tags.joinToString(" • "),
+        color = Color(0xFF6B7280),
+        fontSize = 12.sp,
+        lineHeight = 17.sp
+    )
+}
+
 private fun formatarSensacaoFinal(valor: String?): String? {
-    return sensacoesFinais.firstOrNull { it.value == valor }?.label
+    val normalizado = valor.normalizedApiValue()
+    return sensacoesFinais.firstOrNull { it.value == normalizado }?.label
 }
 
 @Composable
@@ -571,8 +642,10 @@ fun RegistroMedicamentoCard(
     medicamento: MedicamentoHojeResponse,
     onRegistrar: (String) -> Unit
 ) {
-    val isFeito = medicamento.statusAdesaoHoje == "REALIZADO"
-    val isNaoFeito = medicamento.statusAdesaoHoje == "NAO_REALIZADO"
+    val status = medicamento.statusAdesaoHoje.normalizedApiValue()
+    val isFeito = status == "REALIZADO"
+    val isNaoFeito = status == "NAO_REALIZADO"
+    val podeRegistrar = medicamento.ocorrenciaId != null
 
     val corCardFundo = when {
         isFeito -> Color(0xFFE8F7ED)
@@ -585,6 +658,7 @@ fun RegistroMedicamentoCard(
     val statusDescricao = when {
         isFeito -> "Registrado"
         isNaoFeito -> "Não realizado"
+        !podeRegistrar -> "Aguardando agenda"
         else -> "Ainda não registrado"
     }
 
@@ -679,7 +753,7 @@ fun RegistroMedicamentoCard(
                         }
                     }
                 }
-            } else {
+            } else if (podeRegistrar) {
                 Column(modifier = Modifier.fillMaxWidth()) {
                     Text(
                         text = statusDescricao,
@@ -721,7 +795,43 @@ fun RegistroMedicamentoCard(
                         }
                     }
                 }
+            } else {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color(0xFFF1F5F9), RoundedCornerShape(12.dp))
+                        .padding(horizontal = 12.dp, vertical = 10.dp)
+                ) {
+                    Text(
+                        text = "A prescrição está ativa, mas o registro de hoje ainda não foi liberado pelo sistema.",
+                        fontSize = 13.sp,
+                        color = Color(0xFF64748B),
+                        fontWeight = FontWeight.SemiBold,
+                        lineHeight = 18.sp
+                    )
+                }
             }
         }
+    }
+}
+
+private fun String?.normalizedApiValue(): String {
+    return orEmpty().trim().uppercase(java.util.Locale.US)
+}
+
+private fun OrientacaoFuncionalResponse.tagsNomes(): List<String> {
+    return tags
+        .orEmpty()
+        .mapNotNull { tag -> tag.nome?.trim()?.takeIf { it.isNotBlank() } }
+        .distinct()
+}
+
+private fun String?.normalizarUrlImagem(): String? {
+    val url = orEmpty().trim()
+    if (url.isBlank()) return null
+
+    return url.takeIf {
+        it.startsWith("https://", ignoreCase = true) ||
+            it.startsWith("http://", ignoreCase = true)
     }
 }
