@@ -7,10 +7,9 @@ import android.content.Intent
 class MedicationNotificationBootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action == Intent.ACTION_BOOT_COMPLETED) {
-            try {
+            runReminderWork {
                 MedicationNotificationScheduler.rescheduleSavedNotifications(context)
-            } catch (_: Exception) {
-                // Reinicialização do aparelho não pode quebrar a abertura futura do app.
+                PresetReminderScheduler.refreshPresetReminders(context)
             }
         }
     }

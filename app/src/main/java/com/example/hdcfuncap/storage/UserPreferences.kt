@@ -22,6 +22,8 @@ class UserPreferences(private val context: Context) {
         val PACIENTE_ID_KEY = longPreferencesKey("paciente_id")
         val PACIENTE_NOME_KEY = stringPreferencesKey("paciente_nome")
         val FONT_SIZE_KEY = stringPreferencesKey("font_size")
+        val WATER_REMINDERS_KEY = booleanPreferencesKey("water_reminders_enabled")
+        val CHECK_IN_REMINDERS_KEY = booleanPreferencesKey("check_in_reminders_enabled")
     }
     private val safeData = context.dataStore.data.catch { exception ->
         if (exception is IOException) {
@@ -55,6 +57,14 @@ class UserPreferences(private val context: Context) {
         preferences[FONT_SIZE_KEY] ?: "media"
     }
 
+    val waterRemindersEnabled: Flow<Boolean> = safeData.map { preferences ->
+        preferences[WATER_REMINDERS_KEY] ?: true
+    }
+
+    val checkInRemindersEnabled: Flow<Boolean> = safeData.map { preferences ->
+        preferences[CHECK_IN_REMINDERS_KEY] ?: true
+    }
+
     suspend fun savePaciente(id: Long, nome: String) {
         context.dataStore.edit { preferences ->
             preferences[PACIENTE_ID_KEY] = id
@@ -79,6 +89,39 @@ class UserPreferences(private val context: Context) {
     suspend fun saveFontSize(fontSize: String) {
         context.dataStore.edit { preferences ->
             preferences[FONT_SIZE_KEY] = fontSize
+        }
+    }
+
+    suspend fun saveAuthenticatedSession(
+        token: String,
+        pacienteId: Long,
+        pacienteNome: String,
+        username: String,
+        remember: Boolean
+    ) {
+        context.dataStore.edit { preferences ->
+            preferences[TOKEN_KEY] = token
+            preferences[PACIENTE_ID_KEY] = pacienteId
+            preferences[PACIENTE_NOME_KEY] = pacienteNome
+            if (remember) {
+                preferences[USERNAME_KEY] = username
+                preferences[REMEMBER_ME_KEY] = true
+            } else {
+                preferences.remove(USERNAME_KEY)
+                preferences[REMEMBER_ME_KEY] = false
+            }
+        }
+    }
+
+    suspend fun saveWaterRemindersEnabled(enabled: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[WATER_REMINDERS_KEY] = enabled
+        }
+    }
+
+    suspend fun saveCheckInRemindersEnabled(enabled: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[CHECK_IN_REMINDERS_KEY] = enabled
         }
     }
 

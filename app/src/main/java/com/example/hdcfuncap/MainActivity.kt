@@ -14,11 +14,13 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -38,6 +40,7 @@ import com.example.hdcfuncap.features.HistoricoViewModelFactory
 import com.example.hdcfuncap.features.HomeScreen
 import com.example.hdcfuncap.features.HomeViewModel
 import com.example.hdcfuncap.features.HomeViewModelFactory
+import com.example.hdcfuncap.features.LembretesScreen
 import com.example.hdcfuncap.features.PerfilDetalhesScreen
 import com.example.hdcfuncap.features.PerfilEditarScreen
 import com.example.hdcfuncap.features.PerfilScreen
@@ -52,9 +55,10 @@ import com.example.hdcfuncap.features.RegistrarViewModel
 import com.example.hdcfuncap.features.RegistrarViewModelFactory
 import com.example.hdcfuncap.network.RetrofitClient
 import com.example.hdcfuncap.notifications.MedicationNotificationScheduler
+import com.example.hdcfuncap.notifications.PresetReminderScheduler
 import com.example.hdcfuncap.storage.UserPreferences
 import androidx.core.content.ContextCompat
-import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.firstOrNull
@@ -71,6 +75,7 @@ class MainActivity : ComponentActivity() {
             val context = LocalContext.current
             val userPreferences = remember { UserPreferences(context) }
             val navController = rememberNavController()
+            val compositionScope = rememberCoroutineScope()
             val isHandlingExpiredSession = remember { AtomicBoolean(false) }
             var sessionChecked by remember { mutableStateOf(false) }
             var startDestination by remember { mutableStateOf("login") }
@@ -90,12 +95,20 @@ class MainActivity : ComponentActivity() {
                     try {
                         notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
                     } catch (_: Exception) {
-                        // A tela não deve ser afetada caso o launcher ainda não esteja pronto.
                     }
                 }
             }
             val currentBackStackEntry by navController.currentBackStackEntryAsState()
             val currentRoute = currentBackStackEntry?.destination?.route
+            val navigateTopLevel: (String) -> Unit = { route ->
+                if (currentRoute != route) {
+                    navController.navigate(route) {
+                        popUpTo("home") { saveState = true }
+                        launchSingleTop = true
+                        restoreState = true
+                    }
+                }
+            }
             val selectedFontSize by userPreferences.fontSize.collectAsState(initial = "media")
             val currentDensity = LocalDensity.current
             val fontScale = when (selectedFontSize) {
@@ -105,31 +118,37 @@ class MainActivity : ComponentActivity() {
             }
 
             LaunchedEffect(Unit) {
-                val token = userPreferences.getAuthToken()
-                if (isJwtTokenValid(token)) {
-                    startDestination = "home"
-                } else {
-                    userPreferences.clearSession()
+                try {
+                    val token = userPreferences.getAuthToken()
+                    if (isJwtTokenValid(token)) {
+                        startDestination = "home"
+                    } else {
+                        userPreferences.clearSession()
+                        startDestination = "login"
+                    }
+                } catch (exception: CancellationException) {
+                    throw exception
+                } catch (_: Exception) {
                     startDestination = "login"
+                } finally {
+                    sessionChecked = true
                 }
-                sessionChecked = true
             }
 
-            LaunchedEffect(navController) {
+            DisposableEffect(navController) {
                 RetrofitClient.setSessionExpiredHandler {
                     if (isHandlingExpiredSession.compareAndSet(false, true)) {
-                        runOnUiThread {
-                            CoroutineScope(Dispatchers.Main).launch {
-                                notificationSetupRequested = false
-                                userPreferences.clearSession()
-                                navController.navigate("login") {
-                                    popUpTo("home") { inclusive = true }
-                                    launchSingleTop = true
-                                }
+                        compositionScope.launch {
+                            notificationSetupRequested = false
+                            userPreferences.clearSession()
+                            navController.navigate("login") {
+                                popUpTo(navController.graph.id) { inclusive = true }
+                                launchSingleTop = true
                             }
                         }
                     }
                 }
+                onDispose { RetrofitClient.setSessionExpiredHandler(null) }
             }
 
             LaunchedEffect(sessionChecked, currentRoute) {
@@ -143,18 +162,21 @@ class MainActivity : ComponentActivity() {
                     requestNotificationPermission()
 
                     val pacienteId = userPreferences.pacienteId.firstOrNull()
-                    if (pacienteId != null) {
-                        try {
-                            withContext(Dispatchers.IO) {
+                    try {
+                        withContext(Dispatchers.IO) {
+                            PresetReminderScheduler.refreshPresetReminders(context.applicationContext)
+                            if (pacienteId != null) {
                                 MedicationNotificationScheduler.refreshMedicationNotifications(
                                     context = context.applicationContext,
                                     authApi = RetrofitClient.getAuthApi(context),
                                     pacienteId = pacienteId
                                 )
                             }
-                        } catch (_: Exception) {
-                            // O app continua aberto mesmo se os lembretes não puderem ser atualizados.
                         }
+                    } catch (exception: CancellationException) {
+                        throw exception
+                    } catch (_: IllegalStateException) {
+                        // O app continua aberto mesmo se os lembretes não puderem ser atualizados.
                     }
                 }
             }
@@ -208,7 +230,7 @@ class MainActivity : ComponentActivity() {
                         factory = HomeViewModelFactory(authApi)
                     )
                     HomeScreen(
-                        onNavigate = { rota -> navController.navigate(rota) },
+                        onNavigate = navigateTopLevel,
                         viewModel = homeViewModel
                     )
                 }
@@ -220,7 +242,7 @@ class MainActivity : ComponentActivity() {
                     )
 
                     PrescricoesScreen(
-                        onNavigate = { rota -> navController.navigate(rota) },
+                        onNavigate = navigateTopLevel,
                         viewModel = prescricoesViewModel
                     )
                 }
@@ -232,23 +254,32 @@ class MainActivity : ComponentActivity() {
                     )
 
                     PerfilScreen(
-                        onNavigate = { rota -> navController.navigate(rota) },
+                        onNavigate = navigateTopLevel,
                         onOpenDetails = { navController.navigate("perfil-detalhes") },
                         onOpenEdit = { navController.navigate("perfil-editar") },
+                        onOpenReminders = { navController.navigate("lembretes") },
                         onOpenSettings = { navController.navigate("configuracoes") },
                         onOpenChangePassword = { navController.navigate("recuperar-senha") },
                         onLogout = {
                             isHandlingExpiredSession.set(false)
                             notificationSetupRequested = false
-                            CoroutineScope(Dispatchers.Main).launch {
+                            compositionScope.launch {
                                 userPreferences.clearSession()
                                 navController.navigate("login") {
-                                    popUpTo("home") { inclusive = true }
+                                    popUpTo(navController.graph.id) { inclusive = true }
                                     launchSingleTop = true
                                 }
                             }
                         },
                         viewModel = perfilViewModel
+                    )
+                }
+                composable("lembretes") {
+                    LembretesScreen(
+                        onNavigate = navigateTopLevel,
+                        onBack = {
+                            navController.popBackStack("perfil", inclusive = false)
+                        }
                     )
                 }
                 composable("perfil-editar") {
@@ -287,7 +318,7 @@ class MainActivity : ComponentActivity() {
                 }
                 composable("configuracoes") {
                     ConfiguracoesScreen(
-                        onNavigate = { rota -> navController.navigate(rota) },
+                        onNavigate = navigateTopLevel,
                         onBack = {
                             navController.popBackStack("perfil", inclusive = false)
                         }
@@ -301,7 +332,7 @@ class MainActivity : ComponentActivity() {
                     )
 
                     HistoricoScreen(
-                        onNavigate = { rota -> navController.navigate(rota) },
+                        onNavigate = navigateTopLevel,
                         viewModel = historicoViewModel
                     )
                 }
@@ -314,7 +345,7 @@ class MainActivity : ComponentActivity() {
                     )
 
                     RegistrarScreen(
-                        onNavigate = { rota -> navController.navigate(rota) },
+                        onNavigate = navigateTopLevel,
                         viewModel = registrarViewModel
                     )
                 }

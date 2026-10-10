@@ -187,6 +187,18 @@ data class HistoricoRealizacaoFuncionalPageResponse(
 )
 
 interface AuthApi {
+    @GET("nutricional/visualizarRefeicoesDoDia")
+    suspend fun getRefeicoesHoje(): RefeicoesDiaResponse
+
+    @POST("nutricional/registrarAdesao")
+    suspend fun registrarRefeicao(@Body request: RegistroRefeicaoRequest): RegistroRefeicaoResponse
+
+    @PUT("nutricional/editarAdesao/{id_ocorrencia}")
+    suspend fun editarRegistroRefeicao(
+        @Path("id_ocorrencia") ocorrenciaId: Long,
+        @Body request: RegistroRefeicaoRequest
+    ): RegistroRefeicaoResponse
+
     @POST("auth/logar")
     suspend fun logar(@Body request: LoginRequest): LoginResponse
 

@@ -1,5 +1,6 @@
 package com.example.hdcfuncap.features
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -40,6 +41,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -70,6 +72,7 @@ private data class MedicacaoComPrescricao(
 private enum class TelaPrescricoes {
     CATEGORIAS,
     MEDICAMENTOS,
+    ALIMENTACAO,
     EXERCICIOS
 }
 
@@ -84,14 +87,22 @@ fun PrescricoesScreen(
 
     val prescricoes by viewModel.prescricoesMedicamentos.collectAsState()
     val orientacoes by viewModel.orientacoesFuncionais.collectAsState()
+    val refeicoes by viewModel.refeicoes.collectAsState()
+    val isLoadingRefeicoes by viewModel.isLoadingRefeicoes.collectAsState()
+    val errorMessageRefeicoes by viewModel.errorMessageRefeicoes.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     val isLoadingOrientacoes by viewModel.isLoadingOrientacoes.collectAsState()
     val errorMessage by viewModel.errorMessage.collectAsState()
     val errorMessageOrientacoes by viewModel.errorMessageOrientacoes.collectAsState()
-    var telaAtual by remember { mutableStateOf(TelaPrescricoes.CATEGORIAS) }
+    var telaAtual by rememberSaveable { mutableStateOf(TelaPrescricoes.CATEGORIAS) }
+
+    BackHandler(enabled = telaAtual != TelaPrescricoes.CATEGORIAS) {
+        telaAtual = TelaPrescricoes.CATEGORIAS
+    }
 
     LaunchedEffect(pacienteId) {
         pacienteId?.let { viewModel.carregarPrescricoesMedicamentos(it) }
+        pacienteId?.let { viewModel.carregarRefeicoes(it) }
         viewModel.carregarOrientacoesFuncionais()
     }
 
@@ -125,6 +136,19 @@ fun PrescricoesScreen(
                 )
             }
 
+            TelaPrescricoes.ALIMENTACAO -> {
+                AlimentacaoPrescritaContent(
+                    innerPadding = innerPadding,
+                    refeicoes = refeicoes,
+                    isLoading = isLoadingRefeicoes,
+                    errorMessage = errorMessageRefeicoes,
+                    onBack = { telaAtual = TelaPrescricoes.CATEGORIAS },
+                    onRefresh = {
+                        pacienteId?.let { viewModel.carregarRefeicoes(it, forceRefresh = true) }
+                    }
+                )
+            }
+
             TelaPrescricoes.EXERCICIOS -> {
                 ExerciciosPrescritosContent(
                     innerPadding = innerPadding,
@@ -141,16 +165,24 @@ fun PrescricoesScreen(
                 PrescricoesCategoriasContent(
                     innerPadding = innerPadding,
                     totalMedicamentos = medicacoes.size,
+                    totalRefeicoes = refeicoes.size,
                     totalExercicios = orientacoes.size,
                     nomeProfissional = prescricoes.firstOrNull()?.nomeProfissional,
-                    isLoading = isLoading || isLoadingOrientacoes,
-                    errorMessage = listOfNotNull(errorMessage, errorMessageOrientacoes)
+                    isLoading = isLoading || isLoadingOrientacoes || isLoadingRefeicoes,
+                    isLoadingRefeicoes = isLoadingRefeicoes,
+                    errorMessageRefeicoes = errorMessageRefeicoes,
+                    errorMessage = listOfNotNull(errorMessage, errorMessageOrientacoes, errorMessageRefeicoes)
                         .joinToString("\n")
                         .ifBlank { null },
                     onOpenMedicamentos = { telaAtual = TelaPrescricoes.MEDICAMENTOS },
+                    onOpenAlimentacao = {
+                        telaAtual = TelaPrescricoes.ALIMENTACAO
+                        pacienteId?.let { viewModel.carregarRefeicoes(it) }
+                    },
                     onOpenExercicios = { telaAtual = TelaPrescricoes.EXERCICIOS },
                     onRefresh = {
                         pacienteId?.let { viewModel.carregarPrescricoesMedicamentos(it, forceRefresh = true) }
+                        pacienteId?.let { viewModel.carregarRefeicoes(it, forceRefresh = true) }
                         viewModel.carregarOrientacoesFuncionais(forceRefresh = true)
                     }
                 )
@@ -163,15 +195,19 @@ fun PrescricoesScreen(
 private fun PrescricoesCategoriasContent(
     innerPadding: PaddingValues,
     totalMedicamentos: Int,
+    totalRefeicoes: Int,
     totalExercicios: Int,
     nomeProfissional: String?,
     isLoading: Boolean,
+    isLoadingRefeicoes: Boolean,
+    errorMessageRefeicoes: String?,
     errorMessage: String?,
     onOpenMedicamentos: () -> Unit,
+    onOpenAlimentacao: () -> Unit,
     onOpenExercicios: () -> Unit,
     onRefresh: () -> Unit
 ) {
-    val isInitialLoading = isLoading && totalMedicamentos == 0 && totalExercicios == 0
+    val isInitialLoading = isLoading && totalMedicamentos == 0 && totalExercicios == 0 && totalRefeicoes == 0
 
     HdcPullToRefresh(
         isRefreshing = isLoading,
@@ -243,9 +279,14 @@ private fun PrescricoesCategoriasContent(
                         iconTint = Color(0xFFF4A261),
                         iconBackground = Color(0xFFFFF2E8),
                         title = "Alimentação",
-                        subtitle = "Em breve",
-                        enabled = false,
-                        onClick = {}
+                        subtitle = when {
+                            isLoadingRefeicoes && totalRefeicoes == 0 -> "Carregando refeições..."
+                            errorMessageRefeicoes != null && totalRefeicoes == 0 -> "Consulta indisponível"
+                            totalRefeicoes == 1 -> "1 refeição prescrita para hoje"
+                            else -> "$totalRefeicoes refeições prescritas para hoje"
+                        },
+                        enabled = true,
+                        onClick = onOpenAlimentacao
                     )
 
                     Spacer(modifier = Modifier.height(22.dp))

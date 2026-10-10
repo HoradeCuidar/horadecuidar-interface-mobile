@@ -63,7 +63,7 @@ fun HdcBottomBar(
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier
                 .padding(bottom = 8.dp)
-                .clickable { onNavigate("registrar") }
+                .clickable(enabled = currentScreen != "registrar") { onNavigate("registrar") }
         ) {
             Box(
                 modifier = Modifier
@@ -104,7 +104,7 @@ fun BottomNavItem(
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier
-            .clickable { onClick() }
+            .clickable(enabled = !isSelected) { onClick() }
             .padding(8.dp)
     ) {
         Icon(

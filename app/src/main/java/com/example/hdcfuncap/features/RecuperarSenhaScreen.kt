@@ -43,6 +43,7 @@ import com.example.hdcfuncap.R
 import com.example.hdcfuncap.network.RetrofitClient
 import com.example.hdcfuncap.network.SolicitarRecuperacaoSenhaRequest
 import kotlinx.coroutines.launch
+import com.example.hdcfuncap.util.rethrowIfCancellation
 
 @Composable
 fun RecuperarSenhaScreen(
@@ -164,6 +165,7 @@ fun RecuperarSenhaScreen(
                         mensagem = response.message
                             ?: "Enviamos um link para o seu e-mail. Abra a mensagem para redefinir sua senha pela web."
                     } catch (e: Exception) {
+                        e.rethrowIfCancellation()
                         mensagem = "Não foi possível enviar o e-mail de recuperação. Tente novamente."
                     } finally {
                         isEnviandoEmail = false

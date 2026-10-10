@@ -31,6 +31,8 @@ import com.example.hdcfuncap.components.HdcBottomBar
 import com.example.hdcfuncap.components.HdcPullToRefresh
 import com.example.hdcfuncap.network.MedicamentoHojeResponse
 import com.example.hdcfuncap.network.OrientacaoFuncionalResponse
+import com.example.hdcfuncap.network.OcorrenciaRefeicaoResponse
+import com.example.hdcfuncap.network.podeRegistrar
 import com.example.hdcfuncap.storage.UserPreferences
 
 @Composable
@@ -43,15 +45,22 @@ fun RegistrarScreen(
     val pacienteId by userPreferences.pacienteId.collectAsState(initial = null)
     val medicamentos by viewModel.medicamentos.collectAsState()
     val exercicios by viewModel.exercicios.collectAsState()
+    val refeicoes by viewModel.refeicoes.collectAsState()
+    val isLoadingRefeicoes by viewModel.isLoadingRefeicoes.collectAsState()
+    val refeicoesErrorMessage by viewModel.refeicoesErrorMessage.collectAsState()
+    val refeicoesSalvando by viewModel.refeicoesSalvando.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     val errorMessage by viewModel.errorMessage.collectAsState()
     val isInitialLoading = isLoading && medicamentos.isEmpty() && exercicios.isEmpty()
     var exercicioSelecionado by remember { mutableStateOf<ExercicioRegistroUi?>(null) }
     var statusSelecionado by remember { mutableStateOf("REALIZADO") }
+    var refeicaoSelecionada by remember { mutableStateOf<OcorrenciaRefeicaoResponse?>(null) }
+    val hoje = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date())
 
     LaunchedEffect(pacienteId) {
         pacienteId?.let { id ->
             viewModel.carregarDados(id)
+            viewModel.carregarRefeicoes(id)
         }
     }
 
@@ -62,9 +71,10 @@ fun RegistrarScreen(
         bottomBar = { HdcBottomBar(currentScreen = "registrar", onNavigate = onNavigate) }
     ) { innerPadding ->
         HdcPullToRefresh(
-            isRefreshing = isLoading,
+            isRefreshing = isLoading || isLoadingRefeicoes,
             onRefresh = {
                 pacienteId?.let { id -> viewModel.carregarDados(id, forceRefresh = true) }
+                pacienteId?.let { id -> viewModel.carregarRefeicoes(id, forceRefresh = true) }
             },
             modifier = Modifier
                 .fillMaxSize()
@@ -95,7 +105,7 @@ fun RegistrarScreen(
                     }
                 }
 
-                if (isInitialLoading) {
+                if (isInitialLoading && refeicoes.isEmpty()) {
                     item {
                         CircularProgressIndicator(
                             color = Color(0xFF6B9DFE),
@@ -136,6 +146,42 @@ fun RegistrarScreen(
                             }
                         )
                         Spacer(modifier = Modifier.height(16.dp))
+                    }
+
+                    item {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        RegistroSectionHeader(
+                            title = "Alimentação de hoje",
+                            subtitle = "Refeições previstas para o seu tratamento"
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                    }
+                    refeicoesErrorMessage?.let { message ->
+                        item {
+                            Text(message, color = Color(0xFFC62828), fontSize = 13.sp)
+                            Spacer(Modifier.height(12.dp))
+                        }
+                    }
+                    if (isLoadingRefeicoes && refeicoes.isEmpty()) {
+                        item {
+                            CircularProgressIndicator(
+                                color = Color(0xFF6B9DFE),
+                                modifier = Modifier.fillMaxWidth().wrapContentWidth(Alignment.CenterHorizontally)
+                            )
+                        }
+                    } else if (refeicoes.isEmpty() && refeicoesErrorMessage == null) {
+                        item {
+                            Text("Nenhuma refeição prevista para hoje.", fontSize = 14.sp, color = Color.Gray)
+                        }
+                    }
+                    items(refeicoes) { ocorrencia ->
+                        RegistroRefeicaoCard(
+                            ocorrencia = ocorrencia,
+                            podeRegistrar = !isLoadingRefeicoes && ocorrencia.podeRegistrar(hoje),
+                            salvando = ocorrencia.id in refeicoesSalvando,
+                            onRegistrar = { refeicaoSelecionada = ocorrencia }
+                        )
+                        Spacer(Modifier.height(16.dp))
                     }
 
                     item {
@@ -189,6 +235,27 @@ fun RegistrarScreen(
                     )
                 }
                 exercicioSelecionado = null
+            }
+        )
+    }
+
+    refeicaoSelecionada?.let { selecionada ->
+        val ocorrencia = refeicoes.firstOrNull { it.id == selecionada.id } ?: selecionada
+        RegistroRefeicaoDialog(
+            ocorrencia = ocorrencia,
+            salvando = ocorrencia.id in refeicoesSalvando,
+            enabled = !isLoadingRefeicoes && pacienteId != null &&
+                refeicoes.any { it.id == ocorrencia.id } && ocorrencia.podeRegistrar(hoje),
+            errorMessage = refeicoesErrorMessage,
+            onDismiss = { refeicaoSelecionada = null },
+            onConfirm = { opcaoId, observacao ->
+                val id = pacienteId
+                val ocorrenciaId = ocorrencia.id
+                if (id != null && ocorrenciaId != null) {
+                    viewModel.registrarRefeicao(id, ocorrenciaId, opcaoId, observacao) {
+                        refeicaoSelecionada = null
+                    }
+                }
             }
         )
     }

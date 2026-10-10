@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import com.example.hdcfuncap.util.rethrowIfCancellation
 
 class PerfilViewModel(private val authApi: AuthApi) : ViewModel() {
     private companion object {
@@ -43,6 +44,7 @@ class PerfilViewModel(private val authApi: AuthApi) : ViewModel() {
                 _profile.value = authApi.getPacienteProfile()
                 lastLoadedAtMillis = SystemClock.elapsedRealtime()
             } catch (e: Exception) {
+                e.rethrowIfCancellation()
                 _errorMessage.value = "Não foi possível carregar seu perfil."
             } finally {
                 _isLoading.value = false
@@ -63,6 +65,7 @@ class PerfilViewModel(private val authApi: AuthApi) : ViewModel() {
                 lastLoadedAtMillis = SystemClock.elapsedRealtime()
                 onSuccess()
             } catch (e: Exception) {
+                e.rethrowIfCancellation()
                 _errorMessage.value = "Não foi possível atualizar seu perfil."
             } finally {
                 _isSaving.value = false

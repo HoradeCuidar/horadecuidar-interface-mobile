@@ -14,6 +14,10 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import com.example.hdcfuncap.util.rethrowIfCancellation
 
 data class HistoricoResumoSemanaUi(
     val label: String,
@@ -77,13 +81,26 @@ class HistoricoViewModel(private val authApi: AuthApi) : ViewModel() {
                 val ocorrenciasPorData = mutableMapOf<String, List<OcorrenciaMedicamentoResponse>>()
                 var avisoParcial: String? = null
 
-                diasDoMes.forEach { data ->
-                    try {
-                        val response = authApi.getMedicamentosHoje(pacienteId, data)
-                        ocorrenciasPorData[data] = response.ocorrencias.orEmpty()
-                    } catch (e: Exception) {
-                        ocorrenciasPorData[data] = emptyList()
-                        avisoParcial = "Alguns dias do histórico de medicamentos não puderam ser carregados."
+                diasDoMes.chunked(4).forEach { lote ->
+                    val resultados = coroutineScope {
+                        lote.map { data ->
+                            async {
+                                try {
+                                    data to authApi.getMedicamentosHoje(pacienteId, data)
+                                        .ocorrencias.orEmpty()
+                                } catch (e: Exception) {
+                                    e.rethrowIfCancellation()
+                                    data to null
+                                }
+                            }
+                        }.awaitAll()
+                    }
+
+                    resultados.forEach { (data, ocorrencias) ->
+                        ocorrenciasPorData[data] = ocorrencias.orEmpty()
+                        if (ocorrencias == null) {
+                            avisoParcial = "Alguns dias do histórico de medicamentos não puderam ser carregados."
+                        }
                     }
                 }
 
@@ -94,6 +111,7 @@ class HistoricoViewModel(private val authApi: AuthApi) : ViewModel() {
                         dataFim = diasDoMes.lastOrNull().orEmpty()
                     )
                 } catch (e: Exception) {
+                    e.rethrowIfCancellation()
                     avisoParcial = "Não foi possível carregar os dados de exercícios."
                     emptyList()
                 }
@@ -116,6 +134,7 @@ class HistoricoViewModel(private val authApi: AuthApi) : ViewModel() {
                 lastCacheKey = cacheKey
                 lastLoadedAtMillis = SystemClock.elapsedRealtime()
             } catch (e: Exception) {
+                e.rethrowIfCancellation()
                 _errorMessage.value = "Não foi possível carregar seu histórico."
                 if (!hasSameMonthCache) {
                     _uiState.value = HistoricoUiState(
@@ -131,12 +150,14 @@ class HistoricoViewModel(private val authApi: AuthApi) : ViewModel() {
     }
 
     fun carregarMesAnterior(pacienteId: Long) {
+        if (_isLoading.value) return
         if (!podeCarregarMesAnterior(mesSelecionado)) return
         mesSelecionado.add(Calendar.MONTH, -1)
         carregarHistorico(pacienteId, forceRefresh = true)
     }
 
     fun carregarProximoMes(pacienteId: Long) {
+        if (_isLoading.value) return
         if (!podeCarregarProximoMes(mesSelecionado)) return
         mesSelecionado.add(Calendar.MONTH, 1)
         carregarHistorico(pacienteId, forceRefresh = true)

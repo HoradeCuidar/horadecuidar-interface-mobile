@@ -7,8 +7,10 @@ import androidx.lifecycle.viewModelScope
 import com.example.hdcfuncap.network.AuthApi
 import com.example.hdcfuncap.network.ItemMedicacaoResponse
 import com.example.hdcfuncap.network.OrientacaoFuncionalResponse
+import com.example.hdcfuncap.network.OcorrenciaRefeicaoResponse
 import com.example.hdcfuncap.network.PrescricaoMedicamentoResponse
 import com.example.hdcfuncap.network.apenasPrescricoesMedicamentosAtivas
+import com.example.hdcfuncap.network.refeicoesDisponiveis
 import com.example.hdcfuncap.network.toMedicamentosHoje
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -17,6 +19,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import com.example.hdcfuncap.util.rethrowIfCancellation
 import org.json.JSONObject
 import retrofit2.HttpException
 
@@ -35,6 +38,15 @@ class PrescricoesViewModel(private val authApi: AuthApi) : ViewModel() {
     val orientacoesFuncionais: StateFlow<List<OrientacaoFuncionalResponse>> =
         _orientacoesFuncionais.asStateFlow()
 
+    private val _refeicoes = MutableStateFlow<List<OcorrenciaRefeicaoResponse>>(emptyList())
+    val refeicoes: StateFlow<List<OcorrenciaRefeicaoResponse>> = _refeicoes.asStateFlow()
+
+    private val _isLoadingRefeicoes = MutableStateFlow(false)
+    val isLoadingRefeicoes: StateFlow<Boolean> = _isLoadingRefeicoes.asStateFlow()
+
+    private val _errorMessageRefeicoes = MutableStateFlow<String?>(null)
+    val errorMessageRefeicoes: StateFlow<String?> = _errorMessageRefeicoes.asStateFlow()
+
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
@@ -50,6 +62,45 @@ class PrescricoesViewModel(private val authApi: AuthApi) : ViewModel() {
     private var lastMedicamentosLoadedAtMillis = 0L
     private var lastMedicamentosPacienteId: Long? = null
     private var lastOrientacoesLoadedAtMillis = 0L
+    private var lastRefeicoesLoadedAtMillis = 0L
+    private var lastRefeicoesPacienteId: Long? = null
+    private var lastRefeicoesDate: String? = null
+    private var lastRefeicoesVersion = -1L
+
+    fun carregarRefeicoes(pacienteId: Long, forceRefresh: Boolean = false) {
+        if (_isLoadingRefeicoes.value) return
+        val hoje = dataAtualIso()
+        val refeicoesVersion = AtualizacoesRefeicoes.versao
+        val samePatientAndDay = lastRefeicoesPacienteId == pacienteId && lastRefeicoesDate == hoje
+        if (!forceRefresh && samePatientAndDay && _errorMessageRefeicoes.value == null &&
+            lastRefeicoesVersion == refeicoesVersion &&
+            lastRefeicoesLoadedAtMillis > 0L &&
+            SystemClock.elapsedRealtime() - lastRefeicoesLoadedAtMillis < AUTO_REFRESH_INTERVAL_MS
+        ) return
+
+        if (!samePatientAndDay) {
+            _refeicoes.value = emptyList()
+            lastRefeicoesLoadedAtMillis = 0L
+        }
+        lastRefeicoesPacienteId = pacienteId
+        lastRefeicoesDate = hoje
+        _isLoadingRefeicoes.value = true
+        _errorMessageRefeicoes.value = null
+
+        viewModelScope.launch {
+            try {
+                _refeicoes.value = authApi.getRefeicoesHoje().refeicoesDisponiveis()
+                lastRefeicoesVersion = refeicoesVersion
+                lastRefeicoesLoadedAtMillis = SystemClock.elapsedRealtime()
+            } catch (e: Exception) {
+                e.rethrowIfCancellation()
+                _errorMessageRefeicoes.value =
+                    "Não foi possível carregar suas refeições. Puxe para atualizar."
+            } finally {
+                _isLoadingRefeicoes.value = false
+            }
+        }
+    }
 
     fun carregarPrescricoesMedicamentos(pacienteId: Long, forceRefresh: Boolean = false) {
         if (_isLoading.value) return
@@ -78,6 +129,7 @@ class PrescricoesViewModel(private val authApi: AuthApi) : ViewModel() {
                     }
                 }
             } catch (e: Exception) {
+                e.rethrowIfCancellation()
                 _errorMessage.value = when (e) {
                     is HttpException -> {
                         val detalhe = e.mensagemErro()
@@ -126,6 +178,7 @@ class PrescricoesViewModel(private val authApi: AuthApi) : ViewModel() {
                     .filter { it.ativo != false }
                 lastOrientacoesLoadedAtMillis = SystemClock.elapsedRealtime()
             } catch (e: Exception) {
+                e.rethrowIfCancellation()
                 _errorMessageOrientacoes.value = "Não foi possível carregar seus exercícios."
                 if (!hasCachedData) {
                     _orientacoesFuncionais.value = emptyList()

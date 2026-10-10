@@ -8,6 +8,14 @@ import com.example.hdcfuncap.network.AuthApi
 import com.example.hdcfuncap.network.AtualizarAdesaoRequest
 import com.example.hdcfuncap.network.MedicamentoHojeResponse
 import com.example.hdcfuncap.network.OrientacaoFuncionalResponse
+import com.example.hdcfuncap.network.OcorrenciaRefeicaoResponse
+import com.example.hdcfuncap.network.RegistroRefeicaoRequest
+import com.example.hdcfuncap.network.StatusRefeicao
+import com.example.hdcfuncap.network.comRegistro
+import com.example.hdcfuncap.network.opcoesRegistraveis
+import com.example.hdcfuncap.network.podeRegistrar
+import com.example.hdcfuncap.network.refeicoesDisponiveis
+import com.example.hdcfuncap.network.statusRefeicao
 import com.example.hdcfuncap.network.RegistroRealizacaoFuncionalRequest
 import com.example.hdcfuncap.network.RegistroRealizacaoFuncionalResponse
 import com.example.hdcfuncap.network.apenasDasPrescricoes
@@ -21,6 +29,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import com.example.hdcfuncap.util.rethrowIfCancellation
 
 data class ExercicioRegistroUi(
     val orientacao: OrientacaoFuncionalResponse,
@@ -37,6 +46,90 @@ class RegistrarViewModel(private val authApi: AuthApi) : ViewModel() {
     private val _exercicios = MutableStateFlow<List<ExercicioRegistroUi>>(emptyList())
     val exercicios: StateFlow<List<ExercicioRegistroUi>> = _exercicios.asStateFlow()
 
+    private val _refeicoes = MutableStateFlow<List<OcorrenciaRefeicaoResponse>>(emptyList())
+    val refeicoes = _refeicoes.asStateFlow()
+    private val _isLoadingRefeicoes = MutableStateFlow(false)
+    val isLoadingRefeicoes = _isLoadingRefeicoes.asStateFlow()
+    private val _refeicoesErrorMessage = MutableStateFlow<String?>(null)
+    val refeicoesErrorMessage = _refeicoesErrorMessage.asStateFlow()
+    private val _refeicoesSalvando = MutableStateFlow<Set<Long>>(emptySet())
+    val refeicoesSalvando = _refeicoesSalvando.asStateFlow()
+    private var lastRefeicoesPacienteId: Long? = null
+    private var lastRefeicoesDate: String? = null
+    private var lastRefeicoesLoadedAtMillis = 0L
+    private var lastRefeicoesVersion = -1L
+
+    fun carregarRefeicoes(pacienteId: Long, forceRefresh: Boolean = false) {
+        if (_isLoadingRefeicoes.value || _refeicoesSalvando.value.isNotEmpty()) return
+        val hoje = dataAtualIso()
+        val version = AtualizacoesRefeicoes.versao
+        val samePatientAndDay = lastRefeicoesPacienteId == pacienteId && lastRefeicoesDate == hoje
+        if (!forceRefresh && samePatientAndDay && lastRefeicoesVersion == version &&
+            _refeicoesErrorMessage.value == null && lastRefeicoesLoadedAtMillis > 0L &&
+            SystemClock.elapsedRealtime() - lastRefeicoesLoadedAtMillis < AUTO_REFRESH_INTERVAL_MS
+        ) return
+        if (!samePatientAndDay) {
+            _refeicoes.value = emptyList()
+            lastRefeicoesLoadedAtMillis = 0L
+        }
+        lastRefeicoesPacienteId = pacienteId
+        lastRefeicoesDate = hoje
+        _isLoadingRefeicoes.value = true
+        _refeicoesErrorMessage.value = null
+        viewModelScope.launch {
+            try {
+                _refeicoes.value = authApi.getRefeicoesHoje().refeicoesDisponiveis()
+                lastRefeicoesLoadedAtMillis = SystemClock.elapsedRealtime()
+                lastRefeicoesVersion = version
+            } catch (e: Exception) {
+                e.rethrowIfCancellation()
+                _refeicoesErrorMessage.value = "Não foi possível carregar as refeições. Puxe para atualizar."
+            } finally {
+                _isLoadingRefeicoes.value = false
+            }
+        }
+    }
+
+    fun registrarRefeicao(
+        pacienteId: Long,
+        ocorrenciaId: Long,
+        opcaoId: Long,
+        observacao: String?,
+        onSuccess: () -> Unit
+    ) {
+        if (ocorrenciaId in _refeicoesSalvando.value || _isLoadingRefeicoes.value) return
+        val ocorrencia = _refeicoes.value.firstOrNull { it.id == ocorrenciaId }
+        if (lastRefeicoesPacienteId != pacienteId || ocorrencia == null ||
+            !ocorrencia.podeRegistrar(dataAtualIso()) || ocorrencia.opcoesRegistraveis().none { it.id == opcaoId }
+        ) {
+            _refeicoesErrorMessage.value = "Esta refeição não está disponível para registro. Atualize a tela."
+            return
+        }
+        _refeicoesSalvando.value += ocorrenciaId
+        _refeicoesErrorMessage.value = null
+        viewModelScope.launch {
+            try {
+                val request = RegistroRefeicaoRequest(ocorrenciaId, opcaoId, observacao?.trim()?.ifBlank { null })
+                val resposta = if (ocorrencia.statusRefeicao == StatusRefeicao.REALIZADO) {
+                    authApi.editarRegistroRefeicao(ocorrenciaId, request)
+                } else {
+                    authApi.registrarRefeicao(request)
+                }
+                val atualizada = ocorrencia.comRegistro(resposta, opcaoId)
+                _refeicoes.value = _refeicoes.value.map { if (it.id == ocorrenciaId) atualizada else it }
+                AtualizacoesRefeicoes.notificarRegistro()
+                lastRefeicoesVersion = AtualizacoesRefeicoes.versao
+                onSuccess()
+            } catch (e: Exception) {
+                e.rethrowIfCancellation()
+                _refeicoesErrorMessage.value =
+                    "Não foi possível confirmar o registro da refeição. Verifique sua conexão ou atualize a tela."
+            } finally {
+                _refeicoesSalvando.value -= ocorrenciaId
+            }
+        }
+    }
+
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
@@ -45,6 +138,7 @@ class RegistrarViewModel(private val authApi: AuthApi) : ViewModel() {
 
     private var lastLoadedAtMillis = 0L
     private var lastPacienteId: Long? = null
+    private val registrosEmAndamento = mutableSetOf<String>()
 
     fun carregarDados(pacienteId: Long, forceRefresh: Boolean = false) {
         if (_isLoading.value) return
@@ -66,6 +160,8 @@ class RegistrarViewModel(private val authApi: AuthApi) : ViewModel() {
                         .toMedicamentosHoje()
                         .apenasDasPrescricoes(prescricoesAtivas)
                 } catch (e: Exception) {
+                    e.rethrowIfCancellation()
+                    erros.add("Não foi possível consultar os registros de medicamentos de hoje. Tente atualizar novamente.")
                     emptyList()
                 }
 
@@ -73,6 +169,7 @@ class RegistrarViewModel(private val authApi: AuthApi) : ViewModel() {
                     prescricoesAtivas.toMedicamentosHojeFallback(hoje)
                 }
             } catch (e: Exception) {
+                e.rethrowIfCancellation()
                 erros.add("Não foi possível carregar os medicamentos de hoje.")
                 if (!hasCachedData) {
                     _medicamentos.value = emptyList()
@@ -82,6 +179,7 @@ class RegistrarViewModel(private val authApi: AuthApi) : ViewModel() {
             try {
                 _exercicios.value = carregarExerciciosDoDia(pacienteId)
             } catch (e: Exception) {
+                e.rethrowIfCancellation()
                 erros.add("Não foi possível carregar os exercícios de hoje.")
                 if (!hasCachedData) {
                     _exercicios.value = emptyList()
@@ -129,6 +227,8 @@ class RegistrarViewModel(private val authApi: AuthApi) : ViewModel() {
         sensacaoFinal: String?,
         observacao: String?
     ) {
+        val registroKey = "exercicio-$pacienteId-${exercicio.orientacao.id}"
+        if (!registrosEmAndamento.add(registroKey)) return
         viewModelScope.launch {
             _errorMessage.value = null
             try {
@@ -157,12 +257,17 @@ class RegistrarViewModel(private val authApi: AuthApi) : ViewModel() {
 
                 carregarDados(pacienteId, forceRefresh = true)
             } catch (e: Exception) {
+                e.rethrowIfCancellation()
                 _errorMessage.value = "Não foi possível salvar este exercício."
+            } finally {
+                registrosEmAndamento.remove(registroKey)
             }
         }
     }
 
     fun registrarAdesao(medicamento: MedicamentoHojeResponse, status: String, pacienteId: Long) {
+        val registroKey = "medicamento-$pacienteId-${medicamento.ocorrenciaId}"
+        if (!registrosEmAndamento.add(registroKey)) return
         viewModelScope.launch {
             _errorMessage.value = null
             try {
@@ -195,7 +300,10 @@ class RegistrarViewModel(private val authApi: AuthApi) : ViewModel() {
 
                 carregarDados(pacienteId, forceRefresh = true)
             } catch (e: Exception) {
+                e.rethrowIfCancellation()
                 _errorMessage.value = "Não foi possível salvar este registro."
+            } finally {
+                registrosEmAndamento.remove(registroKey)
             }
         }
     }

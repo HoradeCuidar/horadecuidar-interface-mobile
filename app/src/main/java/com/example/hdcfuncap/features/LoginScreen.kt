@@ -26,6 +26,7 @@ import com.example.hdcfuncap.storage.UserPreferences
 import java.io.IOException
 import kotlinx.coroutines.launch
 import retrofit2.HttpException
+import com.example.hdcfuncap.util.rethrowIfCancellation
 
 @Composable
 fun LoginScreen(
@@ -197,12 +198,17 @@ fun LoginScreen(
                             return@launch
                         }
 
-                        userPreferences.saveToken(token)
-                        userPreferences.savePaciente(id = pacienteId, nome = usuarioTratado)
-                        userPreferences.saveUser(username = usuarioTratado, remember = lembrarDeMim)
+                        userPreferences.saveAuthenticatedSession(
+                            token = token,
+                            pacienteId = pacienteId,
+                            pacienteNome = usuarioTratado,
+                            username = usuarioTratado,
+                            remember = lembrarDeMim
+                        )
 
                         onLoginSuccess()
                     } catch (e: Exception) {
+                        e.rethrowIfCancellation()
                         loginMessage = when (e) {
                             is IOException -> "Não foi possível conectar ao servidor. Verifique sua internet e tente novamente."
                             is HttpException -> {

@@ -46,6 +46,7 @@ import androidx.compose.ui.unit.sp
 import com.example.hdcfuncap.components.HdcBottomBar
 import com.example.hdcfuncap.components.HdcPullToRefresh
 import com.example.hdcfuncap.network.MedicamentoHojeResponse
+import com.example.hdcfuncap.network.OcorrenciaRefeicaoResponse
 import com.example.hdcfuncap.storage.UserPreferences
 
 @Composable
@@ -60,9 +61,13 @@ fun HomeScreen(
     val pacienteNome by userPreferences.pacienteNome.collectAsState(initial = "Paciente")
 
     val medicamentos by viewModel.medicamentos.collectAsState()
+    val refeicoes by viewModel.refeicoes.collectAsState()
+    val refeicoesErrorMessage by viewModel.refeicoesErrorMessage.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
+    val isLoadingMedicamentos by viewModel.isLoadingMedicamentos.collectAsState()
+    val isLoadingRefeicoes by viewModel.isLoadingRefeicoes.collectAsState()
     val errorMessage by viewModel.errorMessage.collectAsState()
-    val isInitialLoading = isLoading && medicamentos.isEmpty()
+    val isInitialLoading = isLoadingMedicamentos && medicamentos.isEmpty()
 
     LaunchedEffect(pacienteId) {
         pacienteId?.let { id ->
@@ -128,7 +133,9 @@ fun HomeScreen(
                 item {
                     DashboardProgressoCard(
                         medicamentos = medicamentos,
-                        isLoading = isInitialLoading
+                        refeicoes = refeicoes,
+                        isLoading = isInitialLoading || (isLoadingRefeicoes && refeicoes.isEmpty()),
+                        isPartial = errorMessage != null || refeicoesErrorMessage != null
                     )
 
                     Spacer(modifier = Modifier.height(24.dp))
@@ -206,6 +213,38 @@ fun HomeScreen(
 
                     Spacer(modifier = Modifier.height(16.dp))
                 }
+
+                refeicoesErrorMessage?.let { message ->
+                    item {
+                        Text(
+                            text = message,
+                            color = Color(0xFFC62828),
+                            fontSize = 13.sp,
+                            modifier = Modifier.padding(bottom = 16.dp)
+                        )
+                    }
+                }
+
+                if (isLoadingRefeicoes && refeicoes.isEmpty()) {
+                    item {
+                        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator(color = azulHdc)
+                        }
+                    }
+                } else if (refeicoes.isEmpty() && refeicoesErrorMessage == null) {
+                    item {
+                        Text(
+                            text = "Nenhuma refeição prescrita para hoje.",
+                            color = corTextoSecundario,
+                            fontSize = 14.sp
+                        )
+                    }
+                } else {
+                    items(refeicoes) { ocorrencia ->
+                        RefeicaoHomeCard(ocorrencia)
+                        Spacer(modifier = Modifier.height(12.dp))
+                    }
+                }
             }
         }
     }
@@ -214,11 +253,16 @@ fun HomeScreen(
 @Composable
 fun DashboardProgressoCard(
     medicamentos: List<MedicamentoHojeResponse>,
-    isLoading: Boolean
+    refeicoes: List<OcorrenciaRefeicaoResponse>,
+    isLoading: Boolean,
+    isPartial: Boolean = false
 ) {
-    val totalTarefas = medicamentos.size
-    val tarefasFeitas = medicamentos.count { it.statusAdesaoHoje == "REALIZADO" }
-    val progresso = if (totalTarefas > 0) tarefasFeitas.toFloat() / totalTarefas else 0f
+    val resumo = remember(medicamentos, refeicoes) {
+        calcularProgressoDiario(medicamentos, refeicoes)
+    }
+    val totalTarefas = resumo.totalTarefas
+    val tarefasFeitas = resumo.tarefasFeitas
+    val progresso = resumo.fracao
     val progressoAnimado by animateFloatAsState(
         targetValue = progresso,
         animationSpec = tween(durationMillis = 700),
@@ -226,6 +270,7 @@ fun DashboardProgressoCard(
     )
     val porcentagem = (progressoAnimado * 100).toInt()
     val mensagem = when {
+        isPartial -> "Progresso parcial"
         totalTarefas == 0 -> "Sem tarefas para hoje"
         tarefasFeitas == totalTarefas -> "Tudo feito por hoje!"
         tarefasFeitas > 0 -> "Continue assim!"
@@ -235,7 +280,7 @@ fun DashboardProgressoCard(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(140.dp)
+            .heightIn(min = 140.dp)
             .background(Color(0xFF78A7FF), RoundedCornerShape(16.dp))
             .padding(horizontal = 22.dp, vertical = 20.dp)
     ) {
@@ -246,8 +291,8 @@ fun DashboardProgressoCard(
             )
         } else {
             Column(
-                modifier = Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.SpaceBetween
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),

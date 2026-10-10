@@ -20,6 +20,10 @@
             android:exported="false" />
 
         <receiver
+            android:name=".notifications.PresetReminderReceiver"
+            android:exported="false" />
+
+        <receiver
             android:name=".notifications.MedicationNotificationBootReceiver"
             android:exported="true">
             <intent-filter>

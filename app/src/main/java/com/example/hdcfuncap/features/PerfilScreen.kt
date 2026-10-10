@@ -60,6 +60,7 @@ fun PerfilScreen(
     onNavigate: (String) -> Unit,
     onOpenDetails: () -> Unit,
     onOpenEdit: () -> Unit,
+    onOpenReminders: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenChangePassword: () -> Unit,
     onLogout: () -> Unit,
@@ -177,7 +178,7 @@ fun PerfilScreen(
                                 iconTint = Color(0xFF6B9DFE),
                                 iconBackground = Color(0xFFEAF1FF),
                                 label = "Lembretes",
-                                onClick = {}
+                                onClick = onOpenReminders
                             )
                             HorizontalDivider(color = Color(0xFFF0F2F5))
                             ProfileActionRow(

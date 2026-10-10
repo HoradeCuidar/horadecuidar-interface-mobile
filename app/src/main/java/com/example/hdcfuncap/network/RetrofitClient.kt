@@ -45,7 +45,7 @@ object RetrofitClient {
 
             val response = chain.proceed(newRequest)
             val statusCode = response.code
-            if (!token.isNullOrEmpty() && (statusCode == 401 || statusCode == 403)) {
+            if (!token.isNullOrEmpty() && statusCode == 401) {
                 sessionExpiredHandler?.invoke()
             }
             response
