@@ -15,6 +15,13 @@ object RetrofitClient {
     private var sessionExpiredHandler: (() -> Unit)? = null
     @Volatile
     private var authApi: AuthApi? = null
+    private val baseHttpClient by lazy {
+        OkHttpClient.Builder()
+            .connectTimeout(20, TimeUnit.SECONDS)
+            .readTimeout(30, TimeUnit.SECONDS)
+            .writeTimeout(30, TimeUnit.SECONDS)
+            .build()
+    }
 
     fun setSessionExpiredHandler(handler: (() -> Unit)?) {
         sessionExpiredHandler = handler
@@ -28,12 +35,19 @@ object RetrofitClient {
         }
     }
 
-    private fun createAuthApi(context: Context): AuthApi {
+    fun getReminderApi(context: Context, token: String): AuthApi =
+        createAuthApi(context.applicationContext, token, notifySessionExpired = false)
+
+    private fun createAuthApi(
+        context: Context,
+        tokenOverride: String? = null,
+        notifySessionExpired: Boolean = true
+    ): AuthApi {
         val userPreferences = UserPreferences(context)
 
         val authInterceptor = Interceptor { chain ->
             val originalRequest = chain.request()
-            val token = runBlocking { userPreferences.getAuthToken() }
+            val token = tokenOverride ?: runBlocking { userPreferences.getAuthToken() }
 
             val newRequest = if (!token.isNullOrEmpty()) {
                 originalRequest.newBuilder()
@@ -45,16 +59,13 @@ object RetrofitClient {
 
             val response = chain.proceed(newRequest)
             val statusCode = response.code
-            if (!token.isNullOrEmpty() && statusCode == 401) {
+            if (notifySessionExpired && !token.isNullOrEmpty() && statusCode == 401) {
                 sessionExpiredHandler?.invoke()
             }
             response
         }
 
-        val okHttpClient = OkHttpClient.Builder()
-            .connectTimeout(20, TimeUnit.SECONDS)
-            .readTimeout(30, TimeUnit.SECONDS)
-            .writeTimeout(30, TimeUnit.SECONDS)
+        val okHttpClient = baseHttpClient.newBuilder()
             .addInterceptor(authInterceptor)
             .build()
 

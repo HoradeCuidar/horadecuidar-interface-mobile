@@ -35,7 +35,10 @@ data class ExercicioRegistroUi(
     val orientacao: OrientacaoFuncionalResponse,
     val registroHoje: RegistroRealizacaoFuncionalResponse?
 )
-class RegistrarViewModel(private val authApi: AuthApi) : ViewModel() {
+class RegistrarViewModel(
+    private val authApi: AuthApi,
+    private val onMedicationRecorded: suspend (MedicamentoHojeResponse, String, Long, Long) -> Unit = { _, _, _, _ -> }
+) : ViewModel() {
     private companion object {
         const val AUTO_REFRESH_INTERVAL_MS = 45_000L
     }
@@ -266,6 +269,7 @@ class RegistrarViewModel(private val authApi: AuthApi) : ViewModel() {
     }
 
     fun registrarAdesao(medicamento: MedicamentoHojeResponse, status: String, pacienteId: Long) {
+        val recordedAt = System.currentTimeMillis()
         val registroKey = "medicamento-$pacienteId-${medicamento.ocorrenciaId}"
         if (!registrosEmAndamento.add(registroKey)) return
         viewModelScope.launch {
@@ -298,6 +302,7 @@ class RegistrarViewModel(private val authApi: AuthApi) : ViewModel() {
                     authApi.criarAdesao(pacienteId = pacienteId, request = request)
                 }
 
+                onMedicationRecorded(medicamento, request.status, pacienteId, recordedAt)
                 carregarDados(pacienteId, forceRefresh = true)
             } catch (e: Exception) {
                 e.rethrowIfCancellation()
@@ -323,11 +328,14 @@ private fun String.normalizedApiValue(): String {
     return trim().uppercase(Locale.US)
 }
 
-class RegistrarViewModelFactory(private val authApi: AuthApi) : ViewModelProvider.Factory {
+class RegistrarViewModelFactory(
+    private val authApi: AuthApi,
+    private val onMedicationRecorded: suspend (MedicamentoHojeResponse, String, Long, Long) -> Unit = { _, _, _, _ -> }
+) : ViewModelProvider.Factory {
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(RegistrarViewModel::class.java)) {
             @Suppress("UNCHECKED_CAST")
-            return RegistrarViewModel(authApi) as T
+            return RegistrarViewModel(authApi, onMedicationRecorded) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }

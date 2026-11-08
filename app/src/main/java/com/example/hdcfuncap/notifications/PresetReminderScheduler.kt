@@ -4,263 +4,114 @@ import android.app.AlarmManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
-import android.os.Build
+import android.net.Uri
+import com.example.hdcfuncap.storage.UserPreferences
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
-import kotlinx.coroutines.flow.firstOrNull
-import kotlinx.coroutines.runBlocking
-import com.example.hdcfuncap.storage.UserPreferences
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 object PresetReminderScheduler {
-    private const val DAYS_TO_SCHEDULE = 7
-    private const val WATER_START_HOUR = 8
-    private const val WATER_END_HOUR = 22
-
     const val SCOPE_WATER = "water"
     const val SCOPE_CHECK_IN = "check_in"
-
-    private val checkInReminders = listOf(
-        FixedReminder(
-            hour = 9,
-            minute = 0,
-            title = "Bom dia!",
-            message = "Que tal vermos o que temos planejado sobre a nossa saúde para hoje?"
-        ),
-        FixedReminder(
-            hour = 12,
-            minute = 0,
-            title = "Pausa do almoço",
-            message = "Que tal aproveitar a pausa do almoço para ver o que ainda temos que fazer daqui para frente?"
-        ),
-        FixedReminder(
-            hour = 21,
-            minute = 0,
-            title = "Fechamento do dia",
-            message = "Que tal recapitular para garantir que não esquecemos de nada?"
-        )
+    private const val PREFS_NAME = "hdc_preset_reminders"
+    private val mutex = Mutex()
+    private val slots = (8..22 step 2).map { hour ->
+        PresetReminderSlot(SCOPE_WATER, hour, "Hora da água", "Que tal fazer uma pausa para tomar água?")
+    } + listOf(
+        PresetReminderSlot(SCOPE_CHECK_IN, 9, "Bom dia!", "Que tal vermos o que temos planejado sobre a nossa saúde para hoje?"),
+        PresetReminderSlot(SCOPE_CHECK_IN, 12, "Pausa do almoço", "Que tal aproveitar a pausa do almoço para ver o que ainda temos que fazer daqui para frente?"),
+        PresetReminderSlot(SCOPE_CHECK_IN, 21, "Fechamento do dia", "Que tal recapitular para garantir que não esquecemos de nada?")
     )
 
-    fun refreshPresetReminders(context: Context) {
-        val appContext = context.applicationContext
-        val preferences = UserPreferences(appContext)
-        val waterEnabled = runBlocking {
-            preferences.waterRemindersEnabled.firstOrNull() ?: true
-        }
-        val checkInEnabled = runBlocking {
-            preferences.checkInRemindersEnabled.firstOrNull() ?: true
-        }
-
-        if (waterEnabled) {
-            scheduleWaterReminders(appContext)
-        } else {
-            cancelScope(appContext, SCOPE_WATER)
-        }
-
-        if (checkInEnabled) {
-            scheduleCheckInReminders(appContext)
-        } else {
-            cancelScope(appContext, SCOPE_CHECK_IN)
-        }
-    }
-
-    fun setWaterRemindersEnabled(context: Context, enabled: Boolean) {
-        if (enabled) {
-            scheduleWaterReminders(context.applicationContext)
-        } else {
-            cancelScope(context.applicationContext, SCOPE_WATER)
-        }
-    }
-
-    fun setCheckInRemindersEnabled(context: Context, enabled: Boolean) {
-        if (enabled) {
-            scheduleCheckInReminders(context.applicationContext)
-        } else {
-            cancelScope(context.applicationContext, SCOPE_CHECK_IN)
-        }
-    }
-
-    fun isScopeEnabled(context: Context, scope: String): Boolean {
-        val preferences = UserPreferences(context.applicationContext)
-        return runBlocking {
-            when (scope) {
-                SCOPE_WATER -> preferences.waterRemindersEnabled.firstOrNull() ?: true
-                SCOPE_CHECK_IN -> preferences.checkInRemindersEnabled.firstOrNull() ?: true
-                else -> false
-            }
-        }
-    }
-
-    private fun scheduleWaterReminders(context: Context) {
-        cancelScope(context, SCOPE_WATER)
-        val reminders = buildList {
-            forEachScheduledDay { day ->
-                var hour = WATER_START_HOUR
-                while (hour <= WATER_END_HOUR) {
-                    add(
-                        ScheduledPresetReminder(
-                            scope = SCOPE_WATER,
-                            requestCode = requestCode(SCOPE_WATER, day, hour, 0),
-                            triggerAtMillis = triggerAt(day, hour, 0),
-                            title = "Hora da água",
-                            message = "Que tal fazer uma pausa para tomar água?"
-                        )
-                    )
-                    hour += 2
-                }
-            }
-        }
-
-        reminders
-            .filter { it.triggerAtMillis > System.currentTimeMillis() }
-            .forEach { schedule(context, it) }
-    }
-
-    private fun scheduleCheckInReminders(context: Context) {
-        cancelScope(context, SCOPE_CHECK_IN)
-        val reminders = buildList {
-            forEachScheduledDay { day ->
-                checkInReminders.forEach { reminder ->
-                    add(
-                        ScheduledPresetReminder(
-                            scope = SCOPE_CHECK_IN,
-                            requestCode = requestCode(SCOPE_CHECK_IN, day, reminder.hour, reminder.minute),
-                            triggerAtMillis = triggerAt(day, reminder.hour, reminder.minute),
-                            title = reminder.title,
-                            message = reminder.message
-                        )
-                    )
-                }
-            }
-        }
-
-        reminders
-            .filter { it.triggerAtMillis > System.currentTimeMillis() }
-            .forEach { schedule(context, it) }
-    }
-
-    private fun cancelScope(context: Context, scope: String) {
-        forEachScheduledDay { day ->
-            if (scope == SCOPE_WATER) {
-                var hour = WATER_START_HOUR
-                while (hour <= WATER_END_HOUR) {
-                    cancel(context, requestCode(scope, day, hour, 0))
-                    hour += 2
-                }
-            }
-
-            if (scope == SCOPE_CHECK_IN) {
-                checkInReminders.forEach { reminder ->
-                    cancel(context, requestCode(scope, day, reminder.hour, reminder.minute))
-                }
-            }
-        }
-    }
-
-    private fun schedule(context: Context, reminder: ScheduledPresetReminder) {
-        try {
-            val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-            val pendingIntent = pendingIntentFor(context, reminder)
-
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                alarmManager.setAndAllowWhileIdle(
-                    AlarmManager.RTC_WAKEUP,
-                    reminder.triggerAtMillis,
-                    pendingIntent
-                )
+    suspend fun refreshPresetReminders(context: Context) = mutex.withLock {
+        migrateLegacyAlarms(context)
+        val preferences = UserPreferences(context)
+        val waterEnabled = preferences.waterRemindersEnabled.first()
+        val checkInEnabled = preferences.checkInRemindersEnabled.first()
+        slots.forEach { slot ->
+            if (if (slot.scope == SCOPE_WATER) waterEnabled else checkInEnabled) {
+                scheduleNext(context, slot, preserveDue = true)
             } else {
-                alarmManager.set(
-                    AlarmManager.RTC_WAKEUP,
-                    reminder.triggerAtMillis,
-                    pendingIntent
-                )
+                cancel(context, slot)
             }
-        } catch (_: Exception) {
-            // Restrições do aparelho não devem afetar o uso normal do app.
         }
     }
 
-    private fun cancel(context: Context, requestCode: Int) {
-        try {
-            val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-            pendingIntentForCancellation(context, requestCode)?.let { pendingIntent ->
-                alarmManager.cancel(pendingIntent)
-                pendingIntent.cancel()
-            }
-        } catch (_: Exception) {
-            // Cancelar é uma rotina defensiva; falhas aqui não podem quebrar a UI.
+    suspend fun setWaterRemindersEnabled(context: Context, enabled: Boolean) = setScopeEnabled(context, SCOPE_WATER, enabled)
+
+    suspend fun setCheckInRemindersEnabled(context: Context, enabled: Boolean) = setScopeEnabled(context, SCOPE_CHECK_IN, enabled)
+
+    private suspend fun setScopeEnabled(context: Context, scope: String, enabled: Boolean) = mutex.withLock {
+        slots.filter { it.scope == scope }.forEach {
+            if (enabled) scheduleNext(context, it, preserveDue = true) else cancel(context, it)
         }
     }
 
-    private fun pendingIntentFor(
-        context: Context,
-        reminder: ScheduledPresetReminder
-    ): PendingIntent {
-        val intent = Intent(context, PresetReminderReceiver::class.java).apply {
-            putExtra(PresetReminderReceiver.EXTRA_SCOPE, reminder.scope)
-            putExtra(PresetReminderReceiver.EXTRA_TITLE, reminder.title)
-            putExtra(PresetReminderReceiver.EXTRA_MESSAGE, reminder.message)
-            putExtra(PresetReminderReceiver.EXTRA_NOTIFICATION_ID, reminder.requestCode)
+    internal suspend fun consume(context: Context, key: String, at: Long, deliver: (PresetReminderSlot) -> Unit) = mutex.withLock {
+        val slot = slots.firstOrNull { it.key == key } ?: return@withLock
+        val preferences = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        if (preferences.getLong(slot.key, 0) != at) return@withLock
+        val userPreferences = UserPreferences(context)
+        val enabled = if (slot.scope == SCOPE_WATER) userPreferences.waterRemindersEnabled.first()
+            else userPreferences.checkInRemindersEnabled.first()
+        if (!enabled) {
+            cancel(context, slot)
+            return@withLock
         }
-
-        return PendingIntent.getBroadcast(
-            context,
-            reminder.requestCode,
-            intent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
+        val now = System.currentTimeMillis()
+        if (now < at) return@withLock
+        // Renew only this slot. Water and check-in at noon remain independent.
+        scheduleNext(context, slot, preserveDue = false)
+        if (now - at <= 3_600_000L) deliver(slot)
     }
 
-    private fun pendingIntentForCancellation(context: Context, requestCode: Int): PendingIntent? {
-        val intent = Intent(context, PresetReminderReceiver::class.java)
-        return PendingIntent.getBroadcast(
-            context,
-            requestCode,
-            intent,
-            PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE
-        )
+    private fun scheduleNext(context: Context, slot: PresetReminderSlot, preserveDue: Boolean) {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val now = System.currentTimeMillis()
+        val previous = prefs.getLong(slot.key, 0)
+        val at = if (preserveDue && previous <= now && now - previous in 0..3_600_000L) previous
+            else ReminderTimes.nextDaily(slot.hour, now)
+        check(prefs.edit().putLong(slot.key, at).commit())
+        LocalReminderAlarm.schedule(context, intent(context, slot, at), at, exact = false)
     }
 
-    private fun forEachScheduledDay(block: (String) -> Unit) {
-        val formatter = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+    private fun cancel(context: Context, slot: PresetReminderSlot) {
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().remove(slot.key).apply()
+        LocalReminderAlarm.cancel(context, intent(context, slot, 0))
+        androidx.core.app.NotificationManagerCompat.from(context).cancel(slot.key, 0)
+    }
+
+    private fun intent(context: Context, slot: PresetReminderSlot, at: Long) = Intent(context, PresetReminderReceiver::class.java).apply {
+        data = Uri.Builder().scheme("hdc").authority("preset-reminder").appendPath(slot.key).build()
+        putExtra(PresetReminderReceiver.EXTRA_SLOT_KEY, slot.key)
+        putExtra(PresetReminderReceiver.EXTRA_AT, at)
+    }
+
+    private fun migrateLegacyAlarms(context: Context) {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        if (prefs.getBoolean("legacy_migrated", false)) return
         val calendar = Calendar.getInstance()
-        repeat(DAYS_TO_SCHEDULE) { offset ->
-            calendar.timeInMillis = System.currentTimeMillis()
-            calendar.add(Calendar.DAY_OF_MONTH, offset)
-            block(formatter.format(calendar.time))
+        calendar.add(Calendar.DAY_OF_MONTH, -1)
+        val formatter = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+        repeat(9) {
+            val day = formatter.format(calendar.time)
+            slots.forEach { slot ->
+                val code = "preset-${slot.scope}-$day-${slot.hour}-0".hashCode()
+                PendingIntent.getBroadcast(context, code, Intent(context, PresetReminderReceiver::class.java),
+                    PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE)?.let { pending ->
+                    context.getSystemService(AlarmManager::class.java).cancel(pending)
+                    pending.cancel()
+                }
+            }
+            calendar.add(Calendar.DAY_OF_MONTH, 1)
         }
-    }
-
-    private fun triggerAt(date: String, hour: Int, minute: Int): Long {
-        val parts = date.split("-")
-        val calendar = Calendar.getInstance().apply {
-            set(Calendar.YEAR, parts.getOrNull(0)?.toIntOrNull() ?: get(Calendar.YEAR))
-            set(Calendar.MONTH, (parts.getOrNull(1)?.toIntOrNull() ?: (get(Calendar.MONTH) + 1)) - 1)
-            set(Calendar.DAY_OF_MONTH, parts.getOrNull(2)?.toIntOrNull() ?: get(Calendar.DAY_OF_MONTH))
-            set(Calendar.HOUR_OF_DAY, hour)
-            set(Calendar.MINUTE, minute)
-            set(Calendar.SECOND, 0)
-            set(Calendar.MILLISECOND, 0)
-        }
-        return calendar.timeInMillis
-    }
-
-    private fun requestCode(scope: String, date: String, hour: Int, minute: Int): Int {
-        return "preset-$scope-$date-$hour-$minute".hashCode()
+        prefs.edit().putBoolean("legacy_migrated", true).apply()
     }
 }
 
-private data class FixedReminder(
-    val hour: Int,
-    val minute: Int,
-    val title: String,
-    val message: String
-)
-
-private data class ScheduledPresetReminder(
-    val scope: String,
-    val requestCode: Int,
-    val triggerAtMillis: Long,
-    val title: String,
-    val message: String
-)
+internal data class PresetReminderSlot(val scope: String, val hour: Int, val title: String, val message: String) {
+    val key: String get() = "$scope/$hour"
+}

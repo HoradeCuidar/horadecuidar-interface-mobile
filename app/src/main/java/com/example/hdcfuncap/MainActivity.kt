@@ -55,12 +55,12 @@ import com.example.hdcfuncap.features.RegistrarViewModel
 import com.example.hdcfuncap.features.RegistrarViewModelFactory
 import com.example.hdcfuncap.network.RetrofitClient
 import com.example.hdcfuncap.notifications.MedicationNotificationScheduler
-import com.example.hdcfuncap.notifications.PresetReminderScheduler
+import com.example.hdcfuncap.notifications.ReminderRefreshWork
 import com.example.hdcfuncap.storage.UserPreferences
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -82,7 +82,7 @@ class MainActivity : ComponentActivity() {
             var notificationSetupRequested by remember { mutableStateOf(false) }
             val notificationPermissionLauncher = rememberLauncherForActivityResult(
                 contract = ActivityResultContracts.RequestPermission(),
-                onResult = {}
+                onResult = { ReminderRefreshWork.enqueue(context) }
             )
             val requestNotificationPermission = {
                 if (
@@ -157,26 +157,13 @@ class MainActivity : ComponentActivity() {
                     currentRoute == "home" &&
                     !notificationSetupRequested
                 ) {
-                    notificationSetupRequested = true
-                    delay(700)
-                    requestNotificationPermission()
-
-                    val pacienteId = userPreferences.pacienteId.firstOrNull()
                     try {
-                        withContext(Dispatchers.IO) {
-                            PresetReminderScheduler.refreshPresetReminders(context.applicationContext)
-                            if (pacienteId != null) {
-                                MedicationNotificationScheduler.refreshMedicationNotifications(
-                                    context = context.applicationContext,
-                                    authApi = RetrofitClient.getAuthApi(context),
-                                    pacienteId = pacienteId
-                                )
-                            }
-                        }
+                        notificationSetupRequested = ReminderRefreshWork.enqueue(context)
+                        requestNotificationPermission()
                     } catch (exception: CancellationException) {
                         throw exception
-                    } catch (_: IllegalStateException) {
-                        // O app continua aberto mesmo se os lembretes não puderem ser atualizados.
+                    } catch (exception: Exception) {
+                        android.util.Log.e("ReminderSetup", "Unable to initialize reminders", exception)
                     }
                 }
             }
@@ -337,11 +324,24 @@ class MainActivity : ComponentActivity() {
                     )
                 }
                 composable("registrar") {
-                    val context = LocalContext.current
+                    val context = LocalContext.current.applicationContext
                     val authApi = remember { RetrofitClient.getAuthApi(context) }
 
                     val registrarViewModel: RegistrarViewModel = viewModel(
-                        factory = RegistrarViewModelFactory(authApi)
+                        factory = RegistrarViewModelFactory(authApi) { medication, status, patientId, recordedAt ->
+                            withContext(NonCancellable + Dispatchers.IO) {
+                                try {
+                                    if (UserPreferences(context).pacienteId.firstOrNull() != patientId) return@withContext
+                                    MedicationNotificationScheduler.activatePatient(context.applicationContext, patientId)
+                                    MedicationNotificationScheduler.onMedicationRecorded(
+                                        context.applicationContext, patientId, medication, status, recordedAt
+                                    )
+                                    ReminderRefreshWork.enqueue(context)
+                                } catch (exception: Exception) {
+                                    android.util.Log.e("MedicationReminders", "Unable to update reminder after record", exception)
+                                }
+                            }
+                        }
                     )
 
                     RegistrarScreen(

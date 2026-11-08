@@ -26,6 +26,7 @@ import androidx.compose.material.icons.automirrored.outlined.DirectionsWalk
 import androidx.compose.material.icons.outlined.Medication
 import androidx.compose.material.icons.outlined.Restaurant
 import androidx.compose.material.icons.outlined.Schedule
+import androidx.compose.material.icons.outlined.PictureAsPdf
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -45,20 +46,20 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import coil.compose.SubcomposeAsyncImage
+import com.example.hdcfuncap.components.ExercicioImagem
+import com.example.hdcfuncap.components.TagsExercicio
 import com.example.hdcfuncap.components.HdcBottomBar
 import com.example.hdcfuncap.components.HdcPullToRefresh
 import com.example.hdcfuncap.network.ItemMedicacaoResponse
 import com.example.hdcfuncap.network.OrientacaoFuncionalResponse
 import com.example.hdcfuncap.network.PrescricaoMedicamentoResponse
+import com.example.hdcfuncap.network.tagsNomes
 import com.example.hdcfuncap.storage.UserPreferences
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -73,7 +74,8 @@ private enum class TelaPrescricoes {
     CATEGORIAS,
     MEDICAMENTOS,
     ALIMENTACAO,
-    EXERCICIOS
+    EXERCICIOS,
+    EXAMES
 }
 
 @Composable
@@ -123,6 +125,10 @@ fun PrescricoesScreen(
         }
     ) { innerPadding ->
         when (telaAtual) {
+            TelaPrescricoes.EXAMES -> MeusExamesContent(
+                innerPadding = innerPadding,
+                onBack = { telaAtual = TelaPrescricoes.CATEGORIAS }
+            )
             TelaPrescricoes.MEDICAMENTOS -> {
                 MedicamentosPrescritosContent(
                     innerPadding = innerPadding,
@@ -180,6 +186,7 @@ fun PrescricoesScreen(
                         pacienteId?.let { viewModel.carregarRefeicoes(it) }
                     },
                     onOpenExercicios = { telaAtual = TelaPrescricoes.EXERCICIOS },
+                    onOpenExames = { telaAtual = TelaPrescricoes.EXAMES },
                     onRefresh = {
                         pacienteId?.let { viewModel.carregarPrescricoesMedicamentos(it, forceRefresh = true) }
                         pacienteId?.let { viewModel.carregarRefeicoes(it, forceRefresh = true) }
@@ -205,6 +212,7 @@ private fun PrescricoesCategoriasContent(
     onOpenMedicamentos: () -> Unit,
     onOpenAlimentacao: () -> Unit,
     onOpenExercicios: () -> Unit,
+    onOpenExames: () -> Unit,
     onRefresh: () -> Unit
 ) {
     val isInitialLoading = isLoading && totalMedicamentos == 0 && totalExercicios == 0 && totalRefeicoes == 0
@@ -310,6 +318,21 @@ private fun PrescricoesCategoriasContent(
 
                     Spacer(modifier = Modifier.height(14.dp))
                 }
+            }
+
+            item {
+                SecaoPrescricoesTitulo(title = "Exames", subtitle = "Laudos e resultados")
+                Spacer(modifier = Modifier.height(12.dp))
+                CategoriaPrescricaoCard(
+                    icon = Icons.Outlined.PictureAsPdf,
+                    iconTint = Color(0xFF6B9DFE),
+                    iconBackground = Color(0xFFEAF1FF),
+                    title = "Meus exames",
+                    subtitle = "Acesse seus laudos em PDF",
+                    enabled = true,
+                    onClick = onOpenExames
+                )
+                Spacer(modifier = Modifier.height(14.dp))
             }
 
             errorMessage?.let { message ->
@@ -665,7 +688,8 @@ private fun ExercicioOrientacaoCard(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 ExercicioImagem(
                     urlImagem = orientacao.urlImagem,
-                    modifier = Modifier.size(58.dp)
+                    modifier = Modifier.size(58.dp),
+                    fallbackIconSize = 26.dp
                 )
 
                 Spacer(modifier = Modifier.width(14.dp))
@@ -705,7 +729,7 @@ private fun ExercicioOrientacaoCard(
 
             if (tags.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(12.dp))
-                TagsTexto(tags = tags)
+                TagsExercicio(tags = tags)
             }
 
             Spacer(modifier = Modifier.height(14.dp))
@@ -742,61 +766,6 @@ private fun ExercicioOrientacaoCard(
             }
         }
     }
-}
-
-@Composable
-private fun ExercicioImagem(
-    urlImagem: String?,
-    modifier: Modifier = Modifier
-) {
-    val imagem = urlImagem.normalizarUrlImagem()
-
-    if (imagem == null) {
-        ExercicioImagemFallback(modifier = modifier)
-        return
-    }
-
-    SubcomposeAsyncImage(
-        model = imagem,
-        contentDescription = null,
-        contentScale = ContentScale.Crop,
-        modifier = modifier
-            .clip(RoundedCornerShape(12.dp))
-            .background(Color(0xFFEAF8F0)),
-        loading = {
-            ExercicioImagemFallback(modifier = Modifier.fillMaxSize())
-        },
-        error = {
-            ExercicioImagemFallback(modifier = Modifier.fillMaxSize())
-        }
-    )
-}
-
-@Composable
-private fun ExercicioImagemFallback(modifier: Modifier = Modifier) {
-    Box(
-        modifier = modifier
-            .clip(RoundedCornerShape(12.dp))
-            .background(Color(0xFFEAF8F0)),
-        contentAlignment = Alignment.Center
-    ) {
-        Icon(
-            imageVector = Icons.AutoMirrored.Outlined.DirectionsWalk,
-            contentDescription = null,
-            tint = Color(0xFF57C47A),
-            modifier = Modifier.size(26.dp)
-        )
-    }
-}
-
-@Composable
-private fun TagsTexto(tags: List<String>) {
-    Text(
-        text = tags.joinToString(" • "),
-        color = Color(0xFF6B7280),
-        fontSize = 12.sp,
-        lineHeight = 17.sp
-    )
 }
 
 @Composable
@@ -975,22 +944,5 @@ private fun formatarData(valor: String?): String {
         "${partes[2]}/${partes[1]}/${partes[0]}"
     } else {
         data
-    }
-}
-
-private fun OrientacaoFuncionalResponse.tagsNomes(): List<String> {
-    return tags
-        .orEmpty()
-        .mapNotNull { tag -> tag.nome?.trim()?.takeIf { it.isNotBlank() } }
-        .distinct()
-}
-
-private fun String?.normalizarUrlImagem(): String? {
-    val url = orEmpty().trim()
-    if (url.isBlank()) return null
-
-    return url.takeIf {
-        it.startsWith("https://", ignoreCase = true) ||
-            it.startsWith("http://", ignoreCase = true)
     }
 }

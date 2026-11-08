@@ -6,6 +6,8 @@ import retrofit2.http.GET
 import retrofit2.http.PUT
 import retrofit2.http.Path
 import retrofit2.http.Query
+import retrofit2.http.Streaming
+import okhttp3.ResponseBody
 
 data class LoginRequest(
     val username: String,
@@ -29,12 +31,6 @@ data class AtualizarAdesaoRequest(
 
 data class SolicitarRecuperacaoSenhaRequest(
     val email: String
-)
-
-data class ResetarSenhaRequest(
-    val token: String,
-    val novaSenha: String,
-    val confirmacao: String
 )
 
 data class MessageResponse(
@@ -187,6 +183,13 @@ data class HistoricoRealizacaoFuncionalPageResponse(
 )
 
 interface AuthApi {
+    @GET("participantes/{id}/exames")
+    suspend fun getExames(@Path("id") pacienteId: Long): List<ExameResponse>
+
+    @Streaming
+    @GET("exames/{id}/arquivo")
+    suspend fun getArquivoExame(@Path("id") exameId: Long): ResponseBody
+
     @GET("nutricional/visualizarRefeicoesDoDia")
     suspend fun getRefeicoesHoje(): RefeicoesDiaResponse
 
@@ -205,11 +208,6 @@ interface AuthApi {
     @POST("auth/recuperacao-senha")
     suspend fun solicitarRecuperacaoSenha(
         @Body request: SolicitarRecuperacaoSenhaRequest
-    ): MessageResponse
-
-    @POST("auth/resetar-senha")
-    suspend fun resetarSenha(
-        @Body request: ResetarSenhaRequest
     ): MessageResponse
 
     @GET("paciente/profile")

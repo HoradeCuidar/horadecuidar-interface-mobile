@@ -7,6 +7,7 @@
     <cloud-backup>
         <exclude domain="file" path="datastore/" />
         <exclude domain="sharedpref" path="hdc_medication_notifications.xml" />
+        <exclude domain="sharedpref" path="hdc_preset_reminders.xml" />
         <!-- TODO: Use <include> and <exclude> to control what is backed up.
         <include .../>
         <exclude .../>
@@ -15,6 +16,7 @@
     <device-transfer>
         <exclude domain="file" path="datastore/" />
         <exclude domain="sharedpref" path="hdc_medication_notifications.xml" />
+        <exclude domain="sharedpref" path="hdc_preset_reminders.xml" />
     </device-transfer>
     <!--
     <device-transfer>

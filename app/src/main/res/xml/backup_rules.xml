@@ -8,6 +8,7 @@
 <full-backup-content>
     <exclude domain="file" path="datastore/" />
     <exclude domain="sharedpref" path="hdc_medication_notifications.xml" />
+    <exclude domain="sharedpref" path="hdc_preset_reminders.xml" />
     <!--
    <include domain="sharedpref" path="."/>
    <exclude domain="sharedpref" path="device.xml"/>

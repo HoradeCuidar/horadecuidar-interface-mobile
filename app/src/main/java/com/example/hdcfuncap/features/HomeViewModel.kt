@@ -48,9 +48,6 @@ class HomeViewModel(private val authApi: AuthApi) : ViewModel() {
     private val _errorMessage = MutableStateFlow<String?>(null)
     val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
 
-    private val _pacienteNome = MutableStateFlow("João da Silva")
-    val pacienteNome: StateFlow<String> = _pacienteNome.asStateFlow()
-
     private var lastLoadedAtMillis = 0L
     private var lastPacienteId: Long? = null
     private var lastLoadedDate: String? = null

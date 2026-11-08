@@ -34,6 +34,7 @@ class PrescricoesViewModel(private val authApi: AuthApi) : ViewModel() {
         _prescricoesMedicamentos.asStateFlow()
 
     private val _orientacoesFuncionais =
+
         MutableStateFlow<List<OrientacaoFuncionalResponse>>(emptyList())
     val orientacoesFuncionais: StateFlow<List<OrientacaoFuncionalResponse>> =
         _orientacoesFuncionais.asStateFlow()

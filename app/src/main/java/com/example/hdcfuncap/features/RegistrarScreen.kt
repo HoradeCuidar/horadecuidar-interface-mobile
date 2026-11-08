@@ -18,19 +18,18 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import coil.compose.SubcomposeAsyncImage
+import com.example.hdcfuncap.components.ExercicioImagem
+import com.example.hdcfuncap.components.TagsExercicio
 import com.example.hdcfuncap.components.HdcBottomBar
 import com.example.hdcfuncap.components.HdcPullToRefresh
 import com.example.hdcfuncap.network.MedicamentoHojeResponse
-import com.example.hdcfuncap.network.OrientacaoFuncionalResponse
+import com.example.hdcfuncap.network.tagsNomes
 import com.example.hdcfuncap.network.OcorrenciaRefeicaoResponse
 import com.example.hdcfuncap.network.podeRegistrar
 import com.example.hdcfuncap.storage.UserPreferences
@@ -531,7 +530,7 @@ fun RegistroExercicioCard(
             val tags = exercicio.orientacao.tagsNomes()
             if (tags.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(12.dp))
-                TagsTexto(tags = tags)
+                TagsExercicio(tags = tags)
             }
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -642,61 +641,6 @@ fun RegistroExercicioCard(
             }
         }
     }
-}
-
-@Composable
-private fun ExercicioImagem(
-    urlImagem: String?,
-    modifier: Modifier = Modifier
-) {
-    val imagem = urlImagem.normalizarUrlImagem()
-
-    if (imagem == null) {
-        ExercicioImagemFallback(modifier = modifier)
-        return
-    }
-
-    SubcomposeAsyncImage(
-        model = imagem,
-        contentDescription = null,
-        contentScale = ContentScale.Crop,
-        modifier = modifier
-            .clip(RoundedCornerShape(12.dp))
-            .background(Color(0xFFEAF8F0)),
-        loading = {
-            ExercicioImagemFallback(modifier = Modifier.fillMaxSize())
-        },
-        error = {
-            ExercicioImagemFallback(modifier = Modifier.fillMaxSize())
-        }
-    )
-}
-
-@Composable
-private fun ExercicioImagemFallback(modifier: Modifier = Modifier) {
-    Box(
-        modifier = modifier
-            .clip(RoundedCornerShape(12.dp))
-            .background(Color(0xFFEAF8F0)),
-        contentAlignment = Alignment.Center
-    ) {
-        Icon(
-            imageVector = Icons.AutoMirrored.Outlined.DirectionsWalk,
-            contentDescription = null,
-            tint = Color(0xFF57C47A),
-            modifier = Modifier.size(24.dp)
-        )
-    }
-}
-
-@Composable
-private fun TagsTexto(tags: List<String>) {
-    Text(
-        text = tags.joinToString(" • "),
-        color = Color(0xFF6B7280),
-        fontSize = 12.sp,
-        lineHeight = 17.sp
-    )
 }
 
 private fun formatarSensacaoFinal(valor: String?): String? {
@@ -884,21 +828,4 @@ fun RegistroMedicamentoCard(
 
 private fun String?.normalizedApiValue(): String {
     return orEmpty().trim().uppercase(java.util.Locale.US)
-}
-
-private fun OrientacaoFuncionalResponse.tagsNomes(): List<String> {
-    return tags
-        .orEmpty()
-        .mapNotNull { tag -> tag.nome?.trim()?.takeIf { it.isNotBlank() } }
-        .distinct()
-}
-
-private fun String?.normalizarUrlImagem(): String? {
-    val url = orEmpty().trim()
-    if (url.isBlank()) return null
-
-    return url.takeIf {
-        it.startsWith("https://", ignoreCase = true) ||
-            it.startsWith("http://", ignoreCase = true)
-    }
 }

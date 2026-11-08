@@ -1,8 +1,12 @@
 package com.example.hdcfuncap.features
 
 import android.Manifest
+import android.app.AlarmManager
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
+import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -25,6 +29,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.outlined.LocalDrink
 import androidx.compose.material.icons.outlined.NotificationsActive
+import androidx.compose.material.icons.outlined.Medication
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -33,11 +39,17 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -49,10 +61,17 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import com.example.hdcfuncap.components.HdcBottomBar
 import com.example.hdcfuncap.notifications.PresetReminderScheduler
+import com.example.hdcfuncap.notifications.MedicationNotificationScheduler
+import com.example.hdcfuncap.notifications.ReminderRefreshWork
 import com.example.hdcfuncap.storage.UserPreferences
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.CancellationException
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 
 @Composable
 fun LembretesScreen(
@@ -63,16 +82,60 @@ fun LembretesScreen(
     val appContext = context.applicationContext
     val userPreferences = remember { UserPreferences(context) }
     val coroutineScope = rememberCoroutineScope()
+    val snackbar = remember { SnackbarHostState() }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    var medicationEnabled by remember { mutableStateOf(true) }
+    var saving by remember { mutableStateOf(false) }
+    var preciseAlarmsAllowed by remember { mutableStateOf(false) }
+    var notificationsAllowed by remember { mutableStateOf(true) }
     val waterEnabled by userPreferences.waterRemindersEnabled.collectAsState(initial = true)
     val checkInEnabled by userPreferences.checkInRemindersEnabled.collectAsState(initial = true)
     val notificationPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission(),
         onResult = {
-            coroutineScope.launch(Dispatchers.IO) {
-                PresetReminderScheduler.refreshPresetReminders(appContext)
-            }
+            ReminderRefreshWork.enqueue(appContext)
         }
     )
+
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                preciseAlarmsAllowed = Build.VERSION.SDK_INT < 31 ||
+                    appContext.getSystemService(AlarmManager::class.java).canScheduleExactAlarms()
+                notificationsAllowed = androidx.core.app.NotificationManagerCompat.from(appContext).areNotificationsEnabled()
+                medicationEnabled = MedicationNotificationScheduler.isEnabled(appContext)
+                ReminderRefreshWork.enqueue(appContext)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    fun savePreference(work: suspend () -> Unit) {
+        if (saving) return
+        saving = true
+        coroutineScope.launch {
+            try {
+                withContext(NonCancellable + Dispatchers.IO) { work() }
+                ReminderRefreshWork.enqueue(appContext)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                android.util.Log.e("ReminderSettings", "Unable to save reminder preference", e)
+                snackbar.showSnackbar("Não foi possível atualizar o lembrete. Tente novamente.")
+            } finally {
+                saving = false
+            }
+        }
+    }
+
+    fun openSystemSettings(intent: Intent) {
+        try {
+            context.startActivity(intent)
+        } catch (e: RuntimeException) {
+            coroutineScope.launch { snackbar.showSnackbar("Não foi possível abrir as configurações do aparelho.") }
+        }
+    }
 
     fun requestNotificationPermissionIfNeeded() {
         if (
@@ -82,11 +145,16 @@ fun LembretesScreen(
                 Manifest.permission.POST_NOTIFICATIONS
             ) != PackageManager.PERMISSION_GRANTED
         ) {
-            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            try {
+                notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            } catch (e: RuntimeException) {
+                android.util.Log.w("ReminderSettings", "Unable to request notification permission", e)
+            }
         }
     }
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbar) },
         bottomBar = {
             HdcBottomBar(
                 currentScreen = "perfil",
@@ -138,7 +206,7 @@ fun LembretesScreen(
                 Spacer(modifier = Modifier.height(6.dp))
 
                 Text(
-                    text = "Esses lembretes ficam salvos no celular e não dependem do backend.",
+                    text = "Preferências deste dispositivo",
                     fontSize = 14.sp,
                     color = Color(0xFF757575),
                     lineHeight = 19.sp
@@ -147,19 +215,37 @@ fun LembretesScreen(
 
             item {
                 ReminderToggleCard(
+                    icon = Icons.Outlined.Medication,
+                    iconTint = Color(0xFF6B9DFE),
+                    iconBackground = Color(0xFFEAF1FF),
+                    title = "Medicamentos",
+                    subtitle = "Intervalos a partir do primeiro registro realizado",
+                    checked = medicationEnabled,
+                    enabled = !saving,
+                    onCheckedChange = { enabled ->
+                        if (enabled) requestNotificationPermissionIfNeeded()
+                        savePreference {
+                            MedicationNotificationScheduler.setEnabled(appContext, enabled)
+                            withContext(Dispatchers.Main) { medicationEnabled = enabled }
+                        }
+                    }
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                ReminderToggleCard(
                     icon = Icons.Outlined.LocalDrink,
                     iconTint = Color(0xFF6B9DFE),
                     iconBackground = Color(0xFFEAF1FF),
                     title = "Beber água",
                     subtitle = "A cada 2 horas, das 08:00 às 22:00",
                     checked = waterEnabled,
+                    enabled = !saving,
                     onCheckedChange = { enabled ->
                         if (enabled) requestNotificationPermissionIfNeeded()
-                        coroutineScope.launch {
+                        savePreference {
                             userPreferences.saveWaterRemindersEnabled(enabled)
-                            withContext(Dispatchers.IO) {
-                                PresetReminderScheduler.setWaterRemindersEnabled(appContext, enabled)
-                            }
+                            PresetReminderScheduler.setWaterRemindersEnabled(appContext, enabled)
                         }
                     }
                 )
@@ -173,16 +259,44 @@ fun LembretesScreen(
                     title = "Lembretes pontuais",
                     subtitle = "Todos os dias às 09:00, 12:00 e 21:00",
                     checked = checkInEnabled,
+                    enabled = !saving,
                     onCheckedChange = { enabled ->
                         if (enabled) requestNotificationPermissionIfNeeded()
-                        coroutineScope.launch {
+                        savePreference {
                             userPreferences.saveCheckInRemindersEnabled(enabled)
-                            withContext(Dispatchers.IO) {
-                                PresetReminderScheduler.setCheckInRemindersEnabled(appContext, enabled)
-                            }
+                            PresetReminderScheduler.setCheckInRemindersEnabled(appContext, enabled)
                         }
                     }
                 )
+            }
+            if (!notificationsAllowed) {
+                item {
+                    TextButton(onClick = {
+                        val settingsIntent = if (Build.VERSION.SDK_INT >= 26) {
+                            Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                                .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+                        } else {
+                            Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${context.packageName}"))
+                        }
+                        openSystemSettings(settingsIntent)
+                    }) {
+                        Icon(Icons.Outlined.Settings, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Notificações bloqueadas no aparelho")
+                    }
+                }
+            }
+            if (Build.VERSION.SDK_INT >= 31 && !preciseAlarmsAllowed) {
+                item {
+                    TextButton(onClick = {
+                        openSystemSettings(Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,
+                            Uri.parse("package:${context.packageName}")))
+                    }) {
+                        Icon(Icons.Outlined.Settings, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Permitir horários precisos para medicamentos")
+                    }
+                }
             }
         }
     }
@@ -196,6 +310,7 @@ private fun ReminderToggleCard(
     title: String,
     subtitle: String,
     checked: Boolean,
+    enabled: Boolean = true,
     onCheckedChange: (Boolean) -> Unit
 ) {
     Card(
@@ -246,6 +361,7 @@ private fun ReminderToggleCard(
 
             Switch(
                 checked = checked,
+                enabled = enabled,
                 onCheckedChange = onCheckedChange,
                 colors = SwitchDefaults.colors(
                     checkedThumbColor = Color.White,

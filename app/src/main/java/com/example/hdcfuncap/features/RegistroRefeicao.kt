@@ -25,6 +25,11 @@ import com.example.hdcfuncap.network.StatusRefeicao
 import com.example.hdcfuncap.network.opcoesRegistraveis
 import com.example.hdcfuncap.network.statusRefeicao
 import com.example.hdcfuncap.network.resumoAlimento
+import com.example.hdcfuncap.ui.theme.HdcBlue
+import com.example.hdcfuncap.ui.theme.HdcFuncapTheme
+import com.example.hdcfuncap.ui.theme.HdcSurface
+import com.example.hdcfuncap.ui.theme.HdcText
+import com.example.hdcfuncap.ui.theme.HdcTextSecondary
 
 @Composable
 internal fun RegistroRefeicaoCard(
@@ -101,7 +106,7 @@ internal fun RegistroRefeicaoDialog(
     errorMessage: String?,
     onDismiss: () -> Unit,
     onConfirm: (Long, String?) -> Unit
-) {
+) = HdcFuncapTheme(darkTheme = false) {
     val opcoes = ocorrencia.opcoesRegistraveis()
     var opcaoId by rememberSaveable(ocorrencia.id) {
         mutableStateOf(ocorrencia.opcao?.id?.takeIf { id -> opcoes.any { it.id == id } } ?: opcoes.singleOrNull()?.id)
@@ -109,6 +114,9 @@ internal fun RegistroRefeicaoDialog(
     var observacao by rememberSaveable(ocorrencia.id) { mutableStateOf(ocorrencia.observacao.orEmpty()) }
     AlertDialog(
         onDismissRequest = { if (!salvando) onDismiss() },
+        containerColor = HdcSurface,
+        titleContentColor = HdcText,
+        textContentColor = HdcTextSecondary,
         title = {
             Text(ocorrencia.refeicao?.nome?.takeIf { it.isNotBlank() } ?: "Registrar refeição")
         },
@@ -130,7 +138,7 @@ internal fun RegistroRefeicaoDialog(
                             selected = opcaoId == opcao.id,
                             onClick = { opcaoId = opcao.id },
                             enabled = !salvando && enabled,
-                            colors = RadioButtonDefaults.colors(selectedColor = Color(0xFF6B9DFE))
+                            colors = RadioButtonDefaults.colors(selectedColor = HdcBlue)
                         )
                         Column(Modifier.weight(1f).padding(top = 12.dp)) {
                             Text(
@@ -163,10 +171,14 @@ internal fun RegistroRefeicaoDialog(
             Button(
                 onClick = { opcaoId?.let { onConfirm(it, observacao.ifBlank { null }) } },
                 enabled = !salvando && enabled && opcoes.any { it.id == opcaoId },
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF6B9DFE))
+                colors = ButtonDefaults.buttonColors(containerColor = HdcBlue, contentColor = Color.White)
             ) {
                 if (salvando) {
-                    CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                    CircularProgressIndicator(
+                        Modifier.size(18.dp),
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.onPrimary
+                    )
                     Spacer(Modifier.width(8.dp))
                 }
                 Text(if (salvando) "Salvando..." else "Salvar registro")

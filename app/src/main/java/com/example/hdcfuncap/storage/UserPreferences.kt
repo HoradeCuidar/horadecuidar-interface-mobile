@@ -12,6 +12,8 @@ import kotlinx.coroutines.flow.map
 
 val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "configs_usuario")
 
+data class SavedPatientSession(val pacienteId: Long, val token: String)
+
 class UserPreferences(private val context: Context) {
 
     companion object {
@@ -57,12 +59,18 @@ class UserPreferences(private val context: Context) {
         preferences[FONT_SIZE_KEY] ?: "media"
     }
 
-    val waterRemindersEnabled: Flow<Boolean> = safeData.map { preferences ->
-        preferences[WATER_REMINDERS_KEY] ?: true
+    private val reminderData: Flow<Preferences?> = context.dataStore.data
+        .map<Preferences, Preferences?> { it }
+        .catch { exception ->
+            if (exception is IOException) emit(null) else throw exception
+        }
+
+    val waterRemindersEnabled: Flow<Boolean> = reminderData.map { preferences ->
+        preferences != null && (preferences[WATER_REMINDERS_KEY] ?: true)
     }
 
-    val checkInRemindersEnabled: Flow<Boolean> = safeData.map { preferences ->
-        preferences[CHECK_IN_REMINDERS_KEY] ?: true
+    val checkInRemindersEnabled: Flow<Boolean> = reminderData.map { preferences ->
+        preferences != null && (preferences[CHECK_IN_REMINDERS_KEY] ?: true)
     }
 
     suspend fun savePaciente(id: Long, nome: String) {
@@ -139,5 +147,12 @@ class UserPreferences(private val context: Context) {
 
     suspend fun getAuthToken(): String? {
         return token.firstOrNull()
+    }
+
+    suspend fun getPatientSession(): SavedPatientSession? {
+        val preferences = safeData.firstOrNull() ?: return null
+        val id = preferences[PACIENTE_ID_KEY] ?: return null
+        val token = preferences[TOKEN_KEY]?.takeIf { it.isNotBlank() } ?: return null
+        return SavedPatientSession(id, token)
     }
 }
